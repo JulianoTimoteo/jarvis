@@ -2,415 +2,387 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000408">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
 <title>JARVIS — AgroAnalytics</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
-<!-- ══════════════════════════════════════════
-     FIX 1 — Firebase: carrega scripts de forma
-     síncrona e controlada, com callback garantido
-     ══════════════════════════════════════════ -->
+<!--
+  FIX #1 — Firebase carregamento em SERIE (nao paralelo)
+  app-compat -> auth-compat -> firestore-compat
+  Cada script so carrega apos o anterior terminar.
+-->
 <script>
-(function() {
-  const scripts = [
+(function () {
+  var SCRIPTS = [
     'https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js',
     'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js',
     'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js'
   ];
-  let loaded = 0;
-  window._firebaseReady = false;
+  window._firebaseReady   = false;
   window._firebaseReadyCb = [];
-
-  function onLoaded() {
-    loaded++;
-    if (loaded === scripts.length) {
+  function loadSerial(i) {
+    if (i >= SCRIPTS.length) {
       window._firebaseReady = true;
-      window._firebaseReadyCb.forEach(fn => { try { fn(); } catch(e) {} });
+      window._firebaseReadyCb.forEach(function(fn){ try{ fn(); }catch(e){} });
+      return;
     }
-  }
-
-  // Carregamento em SÉRIE para garantir dependências (app → auth → firestore)
-  function loadNext(index) {
-    if (index >= scripts.length) return;
-    const s = document.createElement('script');
-    s.src = scripts[index];
-    s.onload  = () => { onLoaded(); loadNext(index + 1); };
-    s.onerror = () => {
-      console.warn('[JARVIS] Firebase CDN falhou no script', index, '— modo offline ativo');
-      onLoaded();
-      loadNext(index + 1);
+    var s = document.createElement('script');
+    s.src   = SCRIPTS[i];
+    s.async = false;
+    s.onload  = function(){ loadSerial(i + 1); };
+    s.onerror = function(){
+      console.warn('[JARVIS] Firebase script ' + i + ' falhou — modo offline');
+      loadSerial(i + 1);
     };
     document.head.appendChild(s);
   }
-  loadNext(0);
+  loadSerial(0);
 })();
 </script>
 
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
 :root {
-  --cyan: #00f5ff;
-  --blue: #0055ff;
-  --glow: rgba(0,245,255,0.6);
-  --dim:  rgba(0,245,255,0.12);
-  --red:  #ff2244;
-  --green:#00ffaa;
-  --bg:   #000408;
+  --cyan:  #00f5ff;
+  --blue:  #0055ff;
+  --glow:  rgba(0,245,255,0.65);
+  --red:   #ff2244;
+  --green: #00ffaa;
+  --bg:    #000408;
+  --card:  rgba(0,8,20,0.97);
 }
 
+html, body {
+  width:100%; height:100%; overflow:hidden;
+  background:var(--bg);
+  font-family:'Share Tech Mono', monospace;
+  color:var(--cyan);
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  user-select:none;
+}
 body {
-  background: var(--bg);
-  width: 100vw; height: 100vh;
-  overflow: hidden;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  font-family: 'Share Tech Mono', monospace;
-  color: var(--cyan);
-  cursor: none;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
 }
 
-/* ── CURSOR ── */
-#cur {
-  position: fixed; width: 24px; height: 24px;
-  border: 1px solid var(--cyan); border-radius: 50%;
-  pointer-events: none; z-index: 9999;
-  transform: translate(-50%,-50%);
-  box-shadow: 0 0 8px var(--glow);
-  transition: width .15s, height .15s;
-}
-
-/* ── SCANLINES ── */
+/* SCANLINES */
 body::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 1; pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg, transparent, transparent 2px,
-    rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
-  );
+  content:''; position:fixed; inset:0; z-index:1; pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.055) 2px,rgba(0,0,0,0.055) 4px);
 }
 
-/* ── STATUS LINE ── */
+/* CURSOR desktop */
+@media (hover:hover){ body { cursor:none; } }
+#cur {
+  position:fixed; width:24px; height:24px;
+  border:1px solid var(--cyan); border-radius:50%;
+  pointer-events:none; z-index:9999;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 8px var(--glow);
+  display:none;
+}
+@media (hover:hover){ #cur { display:block; } }
+
+/* STATUS BAR */
 #status-bar {
-  position: fixed; top: 0; left: 0; right: 0;
-  padding: 10px 24px;
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 0.6rem; letter-spacing: 0.2em;
-  color: rgba(0,245,255,0.4);
-  border-bottom: 1px solid rgba(0,245,255,0.08);
-  z-index: 10;
+  position:fixed; top:0; left:0; right:0;
+  padding:10px 20px;
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:0.55rem; letter-spacing:0.18em;
+  color:rgba(0,245,255,0.38);
+  border-bottom:1px solid rgba(0,245,255,0.07);
+  z-index:20; background:rgba(0,4,12,0.6);
+  backdrop-filter:blur(6px);
 }
-#status-bar .dot {
-  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--green); box-shadow: 0 0 6px var(--green);
-  margin-right: 8px;
-  animation: blink 2s ease-in-out infinite;
+.dot {
+  display:inline-block; width:5px; height:5px; border-radius:50%;
+  background:var(--green); box-shadow:0 0 5px var(--green);
+  margin-right:7px; animation:blink 2s ease-in-out infinite;
 }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.18} }
 
-/* ── TRANSCRIPT ── */
+/* TRANSCRIPT */
 #transcript {
-  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
-  font-size: 0.85rem; letter-spacing: 0.1em;
-  color: rgba(0,245,255,0.7);
-  text-align: center; max-width: 70vw;
-  min-height: 24px;
-  z-index: 10;
-  transition: opacity .3s;
+  position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+  font-size:0.78rem; letter-spacing:0.1em;
+  color:rgba(0,245,255,0.72); text-align:center;
+  max-width:82vw; min-height:22px; z-index:20;
+  transition:opacity .3s; opacity:0;
 }
 
-/* ── RESPONSE CARD ── */
+/* RESPONSE CARD */
 #response-card {
-  position: fixed;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(680px, 90vw);
-  background: rgba(0,8,20,0.96);
-  border: 1px solid rgba(0,245,255,0.2);
-  border-radius: 8px;
-  padding: 28px 32px;
-  z-index: 50;
-  display: none;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 0 60px rgba(0,245,255,0.08), 0 40px 80px rgba(0,0,0,0.8);
-  max-height: 70vh;
-  overflow-y: auto;
+  position:fixed; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:min(680px,92vw); max-height:70vh;
+  background:var(--card);
+  border:1px solid rgba(0,245,255,0.22);
+  border-radius:10px; padding:26px 28px;
+  z-index:60; display:none; overflow-y:auto;
+  backdrop-filter:blur(24px);
+  box-shadow:0 0 60px rgba(0,245,255,0.07), 0 40px 80px rgba(0,0,0,0.85);
 }
-#response-card.visible { display: block; animation: card-in .3s ease; }
+#response-card.visible { display:block; animation:card-in .3s ease; }
 @keyframes card-in {
-  from { opacity:0; transform:translate(-50%,-48%); }
-  to   { opacity:1; transform:translate(-50%,-50%); }
+  from{ opacity:0; transform:translate(-50%,-46%); }
+  to  { opacity:1; transform:translate(-50%,-50%); }
 }
-#response-card .rc-title {
-  font-family: 'Orbitron', monospace;
-  font-size: 0.55rem; letter-spacing: 0.3em;
-  color: rgba(0,245,255,0.5); margin-bottom: 16px;
-  display: flex; justify-content: space-between; align-items: center;
+.rc-title {
+  font-family:'Orbitron',monospace; font-size:0.5rem;
+  letter-spacing:0.3em; color:rgba(0,245,255,0.45);
+  margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;
 }
-#response-card .rc-close {
-  cursor: pointer; color: rgba(0,245,255,0.4);
-  font-size: 1rem; line-height: 1;
-  transition: color .2s;
+.rc-close {
+  cursor:pointer; color:rgba(0,245,255,0.38); font-size:1rem; transition:color .2s;
 }
-#response-card .rc-close:hover { color: var(--red); }
-#response-card .rc-body {
-  font-size: 0.78rem; line-height: 1.8;
-  color: #c0ecff;
-  white-space: pre-wrap;
-}
+.rc-close:hover,.rc-close:active { color:var(--red); }
+.rc-body { font-size:0.76rem; line-height:1.85; color:#c2edff; white-space:pre-wrap; }
 
-/* ── METRICS GRID ── */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
+.metrics-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:14px; }
 .metric-box {
-  background: rgba(0,245,255,0.04);
-  border: 1px solid rgba(0,245,255,0.15);
-  border-radius: 4px;
-  padding: 12px 14px;
-  text-align: center;
+  background:rgba(0,245,255,0.04); border:1px solid rgba(0,245,255,0.13);
+  border-radius:5px; padding:11px 12px; text-align:center;
 }
-.metric-box .mb-label {
-  font-size: 0.48rem; letter-spacing: 0.15em;
-  color: rgba(0,245,255,0.45); text-transform: uppercase;
-  margin-bottom: 6px;
-}
-.metric-box .mb-val {
-  font-family: 'Orbitron', monospace;
-  font-size: 1.2rem; font-weight: 700;
-  color: #fff;
-  text-shadow: 0 0 12px var(--cyan);
-}
-.metric-box .mb-sub {
-  font-size: 0.46rem; color: rgba(0,245,255,0.35); margin-top: 3px;
-}
+.mb-label { font-size:0.44rem; letter-spacing:0.15em; color:rgba(0,245,255,0.42); text-transform:uppercase; margin-bottom:5px; }
+.mb-val   { font-family:'Orbitron',monospace; font-size:1.1rem; font-weight:700; color:#fff; text-shadow:0 0 12px var(--cyan); }
+.mb-sub   { font-size:0.43rem; color:rgba(0,245,255,0.32); margin-top:2px; }
 
-/* ── CENTER STAGE ── */
+/* STAGE & ARC */
 #stage {
-  position: relative;
-  width: 380px; height: 380px;
-  display: flex; align-items: center; justify-content: center;
-  z-index: 10;
+  position:relative; width:min(340px,78vw); height:min(340px,78vw);
+  display:flex; align-items:center; justify-content:center; z-index:10;
 }
-
-/* ── ARC REACTOR ── */
 #arc {
-  position: relative;
-  width: 240px; height: 240px;
+  position:relative; width:min(240px,62vw); height:min(240px,62vw);
 }
-#arc svg {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-}
+#arc svg { position:absolute; inset:0; width:100%; height:100%; }
 
-/* Core glow circle */
 #arc-core {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 72px; height: 72px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #fff 0%, #00f5ff 35%, transparent 70%);
-  box-shadow:
-    0 0 20px 8px rgba(0,245,255,0.9),
-    0 0 50px 20px rgba(0,245,255,0.5),
-    0 0 100px 40px rgba(0,100,255,0.3);
-  animation: core-idle 3s ease-in-out infinite;
-  transition: all .3s;
-  cursor: pointer; /* FIX: clicável para ativar mic */
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:min(72px,18vw); height:min(72px,18vw);
+  border-radius:50%;
+  background:radial-gradient(circle,#fff 0%,#00f5ff 34%,transparent 70%);
+  box-shadow:0 0 20px 8px rgba(0,245,255,.9),0 0 50px 20px rgba(0,245,255,.5),0 0 100px 40px rgba(0,100,255,.3);
+  animation:core-idle 3s ease-in-out infinite;
+  cursor:pointer; touch-action:manipulation;
 }
+body.listening #arc-core { animation:core-listen .6s ease-in-out infinite alternate; }
+body.speaking  #arc-core { animation:core-speak  .4s ease-in-out infinite alternate; }
+body.thinking  #arc-core { animation:core-think  1s  ease-in-out infinite; }
 
-body.listening #arc-core {
-  animation: core-listen 0.6s ease-in-out infinite alternate;
-}
-body.speaking #arc-core {
-  animation: core-speak 0.4s ease-in-out infinite alternate;
-}
-body.thinking #arc-core {
-  animation: core-think 1s ease-in-out infinite;
-}
+@keyframes core-idle   { 0%,100%{transform:translate(-50%,-50%) scale(1);    opacity:.85} 50%{transform:translate(-50%,-50%) scale(1.05);opacity:1} }
+@keyframes core-listen { from{transform:translate(-50%,-50%) scale(.95);box-shadow:0 0 20px 8px rgba(0,245,255,.9),0 0 50px 20px rgba(0,245,255,.5),0 0 100px 40px rgba(0,100,255,.3)} to{transform:translate(-50%,-50%) scale(1.16);box-shadow:0 0 32px 16px rgba(0,245,255,1),0 0 80px 36px rgba(0,245,255,.7),0 0 140px 60px rgba(0,100,255,.5)} }
+@keyframes core-speak  { from{transform:translate(-50%,-50%) scale(1);box-shadow:0 0 20px 8px rgba(0,255,100,.8),0 0 50px 20px rgba(0,255,100,.4)} to{transform:translate(-50%,-50%) scale(1.13);box-shadow:0 0 36px 16px rgba(0,255,100,1),0 0 80px 36px rgba(0,255,100,.6)} }
+@keyframes core-think  { 0%,100%{transform:translate(-50%,-50%) scale(1);   opacity:.58} 50%{transform:translate(-50%,-50%) scale(1.09);opacity:1} }
 
-@keyframes core-idle {
-  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.85; }
-  50% { transform: translate(-50%,-50%) scale(1.05); opacity: 1; }
-}
-@keyframes core-listen {
-  from { transform: translate(-50%,-50%) scale(0.95);
-    box-shadow: 0 0 20px 8px rgba(0,245,255,0.9), 0 0 50px 20px rgba(0,245,255,0.5), 0 0 100px 40px rgba(0,100,255,0.3); }
-  to   { transform: translate(-50%,-50%) scale(1.15);
-    box-shadow: 0 0 30px 15px rgba(0,245,255,1), 0 0 80px 35px rgba(0,245,255,0.7), 0 0 140px 60px rgba(0,100,255,0.5); }
-}
-@keyframes core-speak {
-  from { transform: translate(-50%,-50%) scale(1);
-    box-shadow: 0 0 20px 8px rgba(0,255,100,0.8), 0 0 50px 20px rgba(0,255,100,0.4); }
-  to   { transform: translate(-50%,-50%) scale(1.12);
-    box-shadow: 0 0 35px 15px rgba(0,255,100,1), 0 0 80px 35px rgba(0,255,100,0.6); }
-}
-@keyframes core-think {
-  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
-  50% { transform: translate(-50%,-50%) scale(1.08); opacity: 1; }
-}
-
-.ring-outer { animation: ring-cw 8s linear infinite; }
-.ring-mid   { animation: ring-ccw 5s linear infinite; }
-.ring-inner { animation: ring-cw 3s linear infinite; }
-.ring-hex   { animation: ring-cw 12s linear infinite; }
-
-body.listening .ring-outer { animation-duration: 3s; }
-body.listening .ring-mid   { animation-duration: 1.5s; }
-body.listening .ring-inner { animation-duration: 0.8s; }
-body.speaking  .ring-outer { animation-duration: 2s; }
-body.speaking  .ring-mid   { animation-duration: 1s; }
-body.speaking  .ring-inner { animation-duration: 0.5s; }
-body.thinking  .ring-outer { animation-duration: 4s; }
-body.thinking  .ring-mid   { animation-duration: 2.5s; }
-body.thinking  .ring-inner { animation-duration: 1.5s; }
-
-@keyframes ring-cw  { to { transform: rotate(360deg); transform-origin: center; } }
-@keyframes ring-ccw { to { transform: rotate(-360deg); transform-origin: center; } }
+.ring-outer { animation:ring-cw  8s  linear infinite; }
+.ring-mid   { animation:ring-ccw 5s  linear infinite; }
+.ring-inner { animation:ring-cw  3s  linear infinite; }
+.ring-hex   { animation:ring-cw  12s linear infinite; }
+body.listening .ring-outer { animation-duration:3s; }  body.listening .ring-mid { animation-duration:1.5s; } body.listening .ring-inner { animation-duration:.8s; }
+body.speaking  .ring-outer { animation-duration:2s; }  body.speaking  .ring-mid { animation-duration:1s;   } body.speaking  .ring-inner { animation-duration:.5s; }
+body.thinking  .ring-outer { animation-duration:4s; }  body.thinking  .ring-mid { animation-duration:2.5s; } body.thinking  .ring-inner { animation-duration:1.5s; }
+@keyframes ring-cw  { to{ transform:rotate(360deg);  transform-origin:center; } }
+@keyframes ring-ccw { to{ transform:rotate(-360deg); transform-origin:center; } }
 
 #state-label {
-  position: absolute;
-  bottom: -48px; left: 50%;
-  transform: translateX(-50%);
-  font-family: 'Orbitron', monospace;
-  font-size: 0.6rem; letter-spacing: 0.4em;
-  color: rgba(0,245,255,0.5);
-  white-space: nowrap;
-  transition: all .3s;
+  position:absolute; bottom:-48px; left:50%; transform:translateX(-50%);
+  font-family:'Orbitron',monospace; font-size:0.55rem; letter-spacing:.4em;
+  color:rgba(0,245,255,0.42); white-space:nowrap; transition:all .3s;
 }
-body.listening #state-label { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
-body.speaking  #state-label { color: var(--green); text-shadow: 0 0 10px var(--green); }
-body.thinking  #state-label { color: rgba(0,245,255,0.7); }
+body.listening #state-label { color:var(--cyan);  text-shadow:0 0 10px var(--cyan); }
+body.speaking  #state-label { color:var(--green); text-shadow:0 0 10px var(--green); }
+body.thinking  #state-label { color:rgba(0,245,255,.7); }
 
-/* Pulse rings */
 .pulse-ring {
-  position: absolute; top:50%; left:50%;
-  transform: translate(-50%,-50%);
-  width: 240px; height: 240px;
-  border-radius: 50%;
-  border: 1px solid rgba(0,245,255,0.3);
-  opacity: 0;
-  pointer-events: none;
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:min(240px,62vw); height:min(240px,62vw);
+  border-radius:50%; border:1px solid rgba(0,245,255,.28);
+  opacity:0; pointer-events:none;
 }
-body.listening .pulse-ring:nth-child(1) { animation: pulse-out 2s ease-out infinite; }
-body.listening .pulse-ring:nth-child(2) { animation: pulse-out 2s ease-out infinite 0.6s; }
-body.listening .pulse-ring:nth-child(3) { animation: pulse-out 2s ease-out infinite 1.2s; }
-body.speaking  .pulse-ring:nth-child(1) { animation: pulse-out 1s ease-out infinite; }
-body.speaking  .pulse-ring:nth-child(2) { animation: pulse-out 1s ease-out infinite 0.3s; }
-body.speaking  .pulse-ring:nth-child(3) { animation: pulse-out 1s ease-out infinite 0.6s; }
-@keyframes pulse-out {
-  0%   { transform:translate(-50%,-50%) scale(1); opacity:0.5; }
-  100% { transform:translate(-50%,-50%) scale(2.5); opacity:0; }
-}
+body.listening .pulse-ring:nth-child(1){ animation:pulse-out 2s  ease-out infinite; }
+body.listening .pulse-ring:nth-child(2){ animation:pulse-out 2s  ease-out infinite  .6s; }
+body.listening .pulse-ring:nth-child(3){ animation:pulse-out 2s  ease-out infinite 1.2s; }
+body.speaking  .pulse-ring:nth-child(1){ animation:pulse-out 1s  ease-out infinite; }
+body.speaking  .pulse-ring:nth-child(2){ animation:pulse-out 1s  ease-out infinite  .3s; }
+body.speaking  .pulse-ring:nth-child(3){ animation:pulse-out 1s  ease-out infinite  .6s; }
+@keyframes pulse-out { 0%{transform:translate(-50%,-50%) scale(1);opacity:.5} 100%{transform:translate(-50%,-50%) scale(2.4);opacity:0} }
 
-/* ── BOTTOM BAR ── */
+/* BOTTOM BAR */
 #bottom-hint {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  padding: 16px 24px;
-  display: flex; justify-content: center; align-items: center;
-  gap: 32px;
-  font-size: 0.52rem; letter-spacing: 0.15em;
-  color: rgba(0,245,255,0.25);
-  border-top: 1px solid rgba(0,245,255,0.06);
-  z-index: 10;
+  position:fixed; bottom:0; left:0; right:0;
+  padding:14px 20px;
+  display:flex; justify-content:center; align-items:center;
+  gap:20px; flex-wrap:wrap;
+  font-size:0.48rem; letter-spacing:0.13em;
+  color:rgba(0,245,255,0.22);
+  border-top:1px solid rgba(0,245,255,0.06);
+  z-index:20;
 }
-#bottom-hint span { cursor: pointer; transition: color .2s; }
-#bottom-hint span:hover { color: var(--cyan); }
+#bottom-hint span { cursor:pointer; transition:color .2s; padding:6px 4px; touch-action:manipulation; }
+#bottom-hint span:hover,#bottom-hint span:active { color:var(--cyan); }
 
-/* ── BOOT OVERLAY ── */
+/* BOOT */
 #boot {
-  position: fixed; inset: 0; z-index: 100;
-  background: #000;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 16px;
-  transition: opacity .8s;
+  position:fixed; inset:0; z-index:200;
+  background:#000;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:18px;
+  transition:opacity .8s;
 }
-#boot.fade { opacity: 0; pointer-events: none; }
-#boot.gone { display: none; }
+#boot.fade{ opacity:0; pointer-events:none; }
+#boot.gone{ display:none; }
 .boot-title {
-  font-family: 'Orbitron', monospace;
-  font-size: clamp(2rem,8vw,5rem); font-weight: 900;
-  letter-spacing: 0.5em;
-  color: var(--cyan);
-  text-shadow: 0 0 40px var(--cyan), 0 0 100px rgba(0,245,255,0.4);
+  font-family:'Orbitron',monospace;
+  font-size:clamp(2.2rem,10vw,5rem); font-weight:900;
+  letter-spacing:.45em; color:var(--cyan);
+  text-shadow:0 0 40px var(--cyan),0 0 100px rgba(0,245,255,.4);
+  animation:title-glow 2s ease-in-out infinite alternate;
 }
-.boot-sub {
-  font-size: 0.58rem; letter-spacing: 0.3em;
-  color: rgba(0,245,255,0.4);
+@keyframes title-glow {
+  from{ text-shadow:0 0 30px var(--cyan),0 0 80px rgba(0,245,255,.3); }
+  to  { text-shadow:0 0 60px var(--cyan),0 0 140px rgba(0,245,255,.6); }
 }
-.boot-progress {
-  width: 200px; height: 1px;
-  background: rgba(0,245,255,0.1);
-  position: relative; overflow: hidden;
-}
+.boot-sub { font-size:.56rem; letter-spacing:.28em; color:rgba(0,245,255,.38); }
+.boot-progress { width:200px; height:1px; background:rgba(0,245,255,.08); position:relative; overflow:hidden; }
 .boot-progress::after {
-  content: ''; position: absolute; inset-block: 0; left: 0;
-  background: linear-gradient(90deg, var(--blue), var(--cyan));
-  box-shadow: 0 0 8px var(--cyan);
-  animation: boot-fill 2.5s ease forwards;
+  content:''; position:absolute; inset-block:0; left:0;
+  background:linear-gradient(90deg,var(--blue),var(--cyan));
+  box-shadow:0 0 8px var(--cyan);
+  animation:boot-fill 2.4s ease forwards;
 }
-@keyframes boot-fill { to { width: 100%; } }
+@keyframes boot-fill { to{ width:100%; } }
 
-/* ── FIX: Overlay de permissão de microfone ── */
-#mic-overlay {
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,4,8,0.95);
-  display: none;
-  flex-direction: column;
-  align-items: center; justify-content: center; gap: 24px;
-  backdrop-filter: blur(8px);
+/* ===== ACTIVATE OVERLAY =====
+   Exige clique do usuario — obrigatorio para mic no Chrome */
+#activate-overlay {
+  position:fixed; inset:0; z-index:180;
+  background:rgba(0,4,12,.96);
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center; gap:26px;
+  backdrop-filter:blur(12px);
 }
-#mic-overlay.visible { display: flex; }
-#mic-overlay .mo-icon { font-size: 3rem; }
-#mic-overlay .mo-title {
-  font-family: 'Orbitron', monospace;
-  font-size: 1rem; letter-spacing: 0.3em;
-  color: var(--cyan); text-shadow: 0 0 20px var(--cyan);
+#activate-overlay.visible{ display:flex; animation:card-in .4s ease; }
+.ao-icon { font-size:3.2rem; animation:ao-pulse 1.5s ease-in-out infinite alternate; }
+@keyframes ao-pulse { from{opacity:.7;transform:scale(1)} to{opacity:1;transform:scale(1.1)} }
+.ao-title {
+  font-family:'Orbitron',monospace; font-size:clamp(.8rem,4vw,1.1rem);
+  letter-spacing:.34em; color:var(--cyan); text-shadow:0 0 20px var(--cyan); text-align:center;
 }
-#mic-overlay .mo-sub {
-  font-size: 0.65rem; letter-spacing: 0.15em;
-  color: rgba(0,245,255,0.5); text-align: center;
-  max-width: 320px; line-height: 1.8;
+.ao-sub {
+  font-size:.62rem; letter-spacing:.12em; color:rgba(0,245,255,.48);
+  text-align:center; max-width:300px; line-height:2;
 }
-#mic-overlay .mo-btn {
-  margin-top: 8px;
-  padding: 14px 40px;
-  border: 1px solid var(--cyan);
-  background: rgba(0,245,255,0.08);
-  color: var(--cyan);
-  font-family: 'Orbitron', monospace;
-  font-size: 0.7rem; letter-spacing: 0.3em;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: all .2s;
+.ao-btn {
+  padding:16px 48px; border:1px solid var(--cyan);
+  background:rgba(0,245,255,.08); color:var(--cyan);
+  font-family:'Orbitron',monospace; font-size:.72rem; letter-spacing:.32em;
+  cursor:pointer; border-radius:4px; transition:all .25s;
+  touch-action:manipulation;
+  box-shadow:0 0 24px rgba(0,245,255,.12);
 }
-#mic-overlay .mo-btn:hover {
-  background: rgba(0,245,255,0.18);
-  box-shadow: 0 0 20px rgba(0,245,255,0.3);
+.ao-btn:hover,.ao-btn:active {
+  background:rgba(0,245,255,.2); box-shadow:0 0 40px rgba(0,245,255,.35);
+  transform:scale(1.04);
+}
+#ao-denied { font-size:.56rem; color:rgba(255,50,80,.75); letter-spacing:.11em; text-align:center; display:none; max-width:300px; line-height:1.9; }
+
+/* ===== MOBILE OVERLAY ===== */
+#mobile-overlay {
+  position:fixed; inset:0; z-index:300;
+  background:rgba(0,4,12,.97);
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center; gap:20px;
+  backdrop-filter:blur(16px); padding:32px;
+}
+#mobile-overlay.visible{ display:flex; }
+.mo-logo {
+  font-family:'Orbitron',monospace; font-size:2.4rem; font-weight:900;
+  letter-spacing:.4em; color:var(--cyan); text-shadow:0 0 40px var(--cyan);
+}
+.mo-title { font-family:'Orbitron',monospace; font-size:.75rem; letter-spacing:.28em; color:var(--cyan); text-align:center; }
+.mo-sub   { font-size:.6rem; letter-spacing:.11em; color:rgba(0,245,255,.48); text-align:center; line-height:1.9; max-width:300px; }
+.mo-steps {
+  background:rgba(0,245,255,.05); border:1px solid rgba(0,245,255,.13);
+  border-radius:8px; padding:16px 20px;
+  font-size:.57rem; letter-spacing:.09em; color:rgba(0,245,255,.58);
+  line-height:2.1; max-width:300px; width:100%;
+}
+.mo-steps b { color:var(--cyan); }
+.mo-dismiss {
+  font-size:.48rem; letter-spacing:.18em; color:rgba(0,245,255,.28);
+  cursor:pointer; text-decoration:underline; touch-action:manipulation;
+}
+.mo-dismiss:active{ color:rgba(0,245,255,.6); }
+
+/* MOBILE TAP-TO-TALK BUTTON */
+#tap-btn {
+  position:fixed; bottom:62px; left:50%; transform:translateX(-50%);
+  display:none;
+  width:62px; height:62px; border-radius:50%;
+  background:rgba(0,245,255,.12); border:2px solid rgba(0,245,255,.5);
+  align-items:center; justify-content:center;
+  font-size:1.6rem; cursor:pointer; z-index:30;
+  box-shadow:0 0 20px rgba(0,245,255,.25);
+  touch-action:manipulation; transition:all .2s;
+}
+#tap-btn.active {
+  background:rgba(0,245,255,.28); box-shadow:0 0 40px rgba(0,245,255,.5);
+  animation:tap-pulse .8s ease-in-out infinite alternate;
+}
+@keyframes tap-pulse {
+  from{ transform:translateX(-50%) scale(1); }
+  to  { transform:translateX(-50%) scale(1.08); }
 }
 </style>
 </head>
 <body>
 
-<!-- Boot -->
+<!-- BOOT -->
 <div id="boot">
   <div class="boot-title">JARVIS</div>
   <div class="boot-sub" id="boot-txt">INITIALIZING SYSTEMS...</div>
   <div class="boot-progress"></div>
 </div>
 
-<!-- FIX: Overlay de permissão do microfone -->
-<div id="mic-overlay">
-  <div class="mo-icon">🎤</div>
-  <div class="mo-title">ACESSO AO MICROFONE</div>
-  <div class="mo-sub">JARVIS precisa do microfone para reconhecer comandos de voz. Clique para autorizar.</div>
-  <button class="mo-btn" onclick="solicitarMicrofone()">AUTORIZAR MICROFONE</button>
+<!-- ACTIVATE OVERLAY (exige clique — obrigatorio para mic funcionar) -->
+<div id="activate-overlay">
+  <div class="ao-icon">🎙️</div>
+  <div class="ao-title">ATIVAR JARVIS</div>
+  <div class="ao-sub">
+    Clique abaixo para ativar.<br>
+    O browser solicitará acesso ao microfone.
+  </div>
+  <button class="ao-btn" onclick="ativarSistema()">◆ ATIVAR SISTEMA ◆</button>
+  <div id="ao-denied">
+    ❌ Microfone bloqueado.<br>
+    Clique no 🔒 cadeado na barra do browser<br>
+    → Microfone → <b>Permitir</b> → Recarregue a página.
+  </div>
 </div>
 
-<!-- Custom cursor -->
+<!-- MOBILE OVERLAY -->
+<div id="mobile-overlay">
+  <div class="mo-logo">JARVIS</div>
+  <div class="mo-title">INSTALE O APLICATIVO</div>
+  <div class="mo-sub">
+    Para reconhecimento de voz contínuo e a melhor experiência,<br>
+    adicione o JARVIS à tela inicial do seu dispositivo.
+  </div>
+  <div class="mo-steps" id="mo-steps"></div>
+  <span class="mo-dismiss" onclick="dispensarMobile()">Continuar no browser mesmo assim →</span>
+</div>
+
+<!-- Cursor (desktop) -->
 <div id="cur"></div>
 
 <!-- Status bar -->
@@ -420,71 +392,54 @@ body.speaking  .pulse-ring:nth-child(3) { animation: pulse-out 1s ease-out infin
   <span id="sb-right">DB: — REG</span>
 </div>
 
-<!-- Center stage -->
+<!-- Stage -->
 <div id="stage">
   <div class="pulse-ring"></div>
   <div class="pulse-ring"></div>
   <div class="pulse-ring"></div>
-
   <div id="arc">
     <svg viewBox="0 0 240 240" class="ring-hex">
-      <polygon points="120,8 218,62 218,178 120,232 22,178 22,62" fill="none" stroke="rgba(0,245,255,0.08)" stroke-width="1"/>
-      <polygon points="120,20 206,68 206,172 120,220 34,172 34,68" fill="none" stroke="rgba(0,245,255,0.06)" stroke-width="0.5"/>
+      <polygon points="120,8 218,62 218,178 120,232 22,178 22,62" fill="none" stroke="rgba(0,245,255,0.07)" stroke-width="1"/>
+      <polygon points="120,20 206,68 206,172 120,220 34,172 34,68" fill="none" stroke="rgba(0,245,255,0.05)" stroke-width="0.5"/>
     </svg>
-
     <svg viewBox="0 0 240 240" class="ring-outer">
-      <circle cx="120" cy="120" r="110" fill="none" stroke="rgba(0,245,255,0.12)" stroke-width="1"/>
-      <circle cx="120" cy="120" r="110" fill="none" stroke="url(#g1)"
-        stroke-width="2" stroke-dasharray="80 614" stroke-linecap="round"/>
-      <circle cx="120" cy="120" r="110" fill="none" stroke="url(#g1)"
-        stroke-width="1.5" stroke-dasharray="30 664" stroke-dashoffset="200" stroke-linecap="round"/>
-      <g stroke="rgba(0,245,255,0.3)" stroke-width="1">
-        <line x1="120" y1="10" x2="120" y2="22"/>
-        <line x1="120" y1="218" x2="120" y2="230"/>
-        <line x1="10" y1="120" x2="22" y2="120"/>
-        <line x1="218" y1="120" x2="230" y2="120"/>
-      </g>
       <defs>
         <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#0055ff"/>
-          <stop offset="100%" stop-color="#00f5ff"/>
+          <stop offset="0%" stop-color="#0055ff"/><stop offset="100%" stop-color="#00f5ff"/>
         </linearGradient>
       </defs>
-    </svg>
-
-    <svg viewBox="0 0 240 240" class="ring-mid">
-      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,245,255,0.06)" stroke-width="1"/>
-      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,200,255,0.5)"
-        stroke-width="2" stroke-dasharray="50 503" stroke-linecap="round"/>
-      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,150,255,0.4)"
-        stroke-width="1" stroke-dasharray="20 533" stroke-dashoffset="150" stroke-linecap="round"/>
-      <g fill="rgba(0,245,255,0.4)">
-        <circle cx="120" cy="32" r="2.5"/><circle cx="180" cy="57" r="2.5"/>
-        <circle cx="208" cy="120" r="2.5"/><circle cx="180" cy="183" r="2.5"/>
-        <circle cx="120" cy="208" r="2.5"/><circle cx="60" cy="183" r="2.5"/>
-        <circle cx="32" cy="120" r="2.5"/><circle cx="60" cy="57" r="2.5"/>
+      <circle cx="120" cy="120" r="110" fill="none" stroke="rgba(0,245,255,0.1)" stroke-width="1"/>
+      <circle cx="120" cy="120" r="110" fill="none" stroke="url(#g1)" stroke-width="2" stroke-dasharray="80 614" stroke-linecap="round"/>
+      <circle cx="120" cy="120" r="110" fill="none" stroke="url(#g1)" stroke-width="1.5" stroke-dasharray="30 664" stroke-dashoffset="200" stroke-linecap="round"/>
+      <g stroke="rgba(0,245,255,0.28)" stroke-width="1">
+        <line x1="120" y1="10"  x2="120" y2="22"/><line x1="120" y1="218" x2="120" y2="230"/>
+        <line x1="10"  y1="120" x2="22"  y2="120"/><line x1="218" y1="120" x2="230" y2="120"/>
       </g>
     </svg>
-
-    <svg viewBox="0 0 240 240" class="ring-inner">
-      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.08)" stroke-width="1.5"/>
-      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.7)"
-        stroke-width="2.5" stroke-dasharray="25 327" stroke-linecap="round"/>
-      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.4)"
-        stroke-width="1.5" stroke-dasharray="10 342" stroke-dashoffset="100" stroke-linecap="round"/>
-      <polygon points="120,80 150,140 90,140" fill="none" stroke="rgba(0,245,255,0.15)" stroke-width="1"/>
+    <svg viewBox="0 0 240 240" class="ring-mid">
+      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,245,255,0.05)" stroke-width="1"/>
+      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,200,255,0.48)" stroke-width="2" stroke-dasharray="50 503" stroke-linecap="round"/>
+      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,150,255,0.38)" stroke-width="1" stroke-dasharray="20 533" stroke-dashoffset="150" stroke-linecap="round"/>
+      <g fill="rgba(0,245,255,0.38)">
+        <circle cx="120" cy="32" r="2.5"/><circle cx="180" cy="57"  r="2.5"/>
+        <circle cx="208" cy="120" r="2.5"/><circle cx="180" cy="183" r="2.5"/>
+        <circle cx="120" cy="208" r="2.5"/><circle cx="60"  cy="183" r="2.5"/>
+        <circle cx="32"  cy="120" r="2.5"/><circle cx="60"  cy="57"  r="2.5"/>
+      </g>
     </svg>
-
-    <!-- Clicável para ativar/reativar mic -->
-    <div id="arc-core" onclick="manualListen()" title="Clique para ativar microfone"></div>
+    <svg viewBox="0 0 240 240" class="ring-inner">
+      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.07)" stroke-width="1.5"/>
+      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.68)" stroke-width="2.5" stroke-dasharray="25 327" stroke-linecap="round"/>
+      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.38)" stroke-width="1.5" stroke-dasharray="10 342" stroke-dashoffset="100" stroke-linecap="round"/>
+      <polygon points="120,80 150,140 90,140" fill="none" stroke="rgba(0,245,255,0.13)" stroke-width="1"/>
+    </svg>
+    <div id="arc-core" onclick="manualListen()" title="Clique para ativar"></div>
     <div id="state-label">AGUARDANDO</div>
   </div>
 </div>
 
-<!-- Transcript -->
 <div id="transcript"></div>
 
-<!-- Response card -->
 <div id="response-card">
   <div class="rc-title">
     <span>◆ JARVIS — RESPOSTA</span>
@@ -494,73 +449,100 @@ body.speaking  .pulse-ring:nth-child(3) { animation: pulse-out 1s ease-out infin
   <div class="metrics-grid" id="rc-metrics"></div>
 </div>
 
-<!-- Bottom hints -->
+<!-- Mobile tap-to-talk -->
+<div id="tap-btn" onclick="mobileTapTalk()">🎤</div>
+
+<!-- Bottom bar -->
 <div id="bottom-hint">
-  <span onclick="manualListen()">🎤 FALAR COM JARVIS</span>
+  <span onclick="manualListen()">🎤 FALAR</span>
   <span>◆</span>
-  <span onclick="perguntarResumoDados()">📊 RESUMO DE DADOS</span>
+  <span onclick="perguntarResumoDados()">📊 RESUMO</span>
   <span>◆</span>
   <span onclick="closeCard()">✕ FECHAR</span>
 </div>
 
 <script>
-// ════════════════════════════════════════════════════════
-// CONFIG
-// ════════════════════════════════════════════════════════
-const FIREBASE_CFG = {
-  apiKey: "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc",
-  authDomain: "agroanalytics-api.firebaseapp.com",
-  projectId: "agroanalytics-api",
-  storageBucket: "agroanalytics-api.firebasestorage.app",
-  messagingSenderId: "739888244342",
-  appId: "1:739888244342:web:558d620583469ec515e157"
-};
+'use strict';
 
+// ════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════
+const FIREBASE_CFG = {
+  apiKey:            "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc",
+  authDomain:        "agroanalytics-api.firebaseapp.com",
+  projectId:         "agroanalytics-api",
+  storageBucket:     "agroanalytics-api.firebasestorage.app",
+  messagingSenderId: "739888244342",
+  appId:             "1:739888244342:web:558d620583469ec515e157"
+};
 const GROQ_KEY = "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";
 
-let db = null;
-let dbData = {};
-let chatHistory = [];
+// ════════════════════════════════════════════════════
+// DETECCAO DE DISPOSITIVO
+// ════════════════════════════════════════════════════
+const UA         = navigator.userAgent || '';
+const IS_IOS     = /iPad|iPhone|iPod/.test(UA) && !window.MSStream;
+const IS_ANDROID = /Android/.test(UA);
+const IS_MOBILE  = IS_IOS || IS_ANDROID || ('ontouchstart' in window && window.innerWidth < 1024);
+const IS_CHROME  = /Chrome/.test(UA) && !/Edge|Edg|OPR/.test(UA);
 
-// ════════════════════════════════════════════════════════
-// FIX 2 — FIREBASE: verificação de app já existente +
-//          espera real pelos scripts carregados
-// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ════════════════════════════════════════════════════
+let db            = null;
+let dbData        = {};
+let chatHistory   = [];
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition   = null;
+let isProcessing  = false;
+let micActive     = false;
+let micPermission = 'unknown';
+let tapRec        = null;
+let isTapTalking  = false;
+
+// ════════════════════════════════════════════════════
+// FIX #2 — FIREBASE: inicializacao robusta
+// Checa firebase.apps.length antes de initializeApp
+// Auth anonima: se falhar, tenta Firestore mesmo assim
+// ════════════════════════════════════════════════════
 function _tryInitFirebase() {
   try {
-    if (typeof firebase === 'undefined') throw new Error('firebase not defined');
-
-    // FIX CRÍTICO: evita "app already exists" em re-inicializações
+    if (typeof firebase === 'undefined') throw new Error('firebase nao carregado');
+    // CORRECAO CRITICA: evita "app already exists"
     if (!firebase.apps || firebase.apps.length === 0) {
       firebase.initializeApp(FIREBASE_CFG);
     }
-
     db = firebase.firestore();
+    console.log('[JARVIS] Firebase OK');
+    sbRight('DB: AUTENTICANDO...');
 
-    // Auth anônima — necessária se Firestore tiver regras de segurança
     firebase.auth().signInAnonymously()
-      .then(() => console.log('[JARVIS] Auth anônima OK'))
-      .catch(e  => console.warn('[JARVIS] Auth anônima falhou (verifique o console Firebase):', e.code, e.message));
-
-    console.log('[JARVIS] Firebase inicializado com sucesso');
-    carregarDados();
+      .then(() => {
+        console.log('[JARVIS] Auth anonima OK');
+        carregarDados();
+      })
+      .catch(err => {
+        // Auth pode estar desabilitada no projeto — tenta Firestore sem auth
+        console.warn('[JARVIS] Auth anonima falhou (' + err.code + ') — tentando sem auth');
+        carregarDados();
+      });
 
   } catch(e) {
-    console.warn('[JARVIS] Firebase offline — rodando sem dados reais:', e.message);
+    console.error('[JARVIS] Firebase falhou:', e.message);
     db = null;
-    document.getElementById('sb-right').textContent = 'DB: OFFLINE';
-    document.getElementById('sb-left').textContent  = 'MODO OFFLINE';
+    sbRight('DB: OFFLINE');
+    document.getElementById('sb-left').textContent = 'MODO OFFLINE';
   }
 }
 
 function initFirebase() {
   if (window._firebaseReady) {
-    // Scripts já carregaram — inicializa direto
     _tryInitFirebase();
   } else {
-    // Scripts ainda carregando — aguarda callback
     window._firebaseReadyCb = window._firebaseReadyCb || [];
     window._firebaseReadyCb.push(_tryInitFirebase);
+    // Timeout: se Firebase nao carregou em 8s, vai offline
+    setTimeout(() => { if (!db) { console.warn('[JARVIS] Firebase timeout'); sbRight('DB: SEM REDE'); } }, 8000);
   }
 }
 
@@ -578,85 +560,142 @@ function parseSnapshot(doc) {
 function carregarDados() {
   if (!db) return;
   ['producao','acmSafra','metas'].forEach(nome => {
-    db.collection('snapshots').doc(nome)
-      .onSnapshot(
-        doc => {
-          dbData[nome] = parseSnapshot(doc);
-          const total = (dbData.producao || []).length;
-          document.getElementById('sb-right').textContent =
-            `DB: ${total.toLocaleString('pt-BR')} REG`;
-          console.log(`[JARVIS] ${nome}: ${dbData[nome].length} registros`);
-        },
-        err => {
-          console.warn(`[JARVIS] Erro ao ouvir '${nome}':`, err.code, err.message);
-          document.getElementById('sb-right').textContent = 'DB: ERRO PERMISSÃO';
-        }
-      );
+    db.collection('snapshots').doc(nome).onSnapshot(
+      doc => {
+        dbData[nome] = parseSnapshot(doc);
+        const n = (dbData.producao||[]).length;
+        sbRight('DB: ' + n.toLocaleString('pt-BR') + ' REG');
+        console.log('[JARVIS]', nome, '->', dbData[nome].length, 'registros');
+      },
+      err => {
+        console.error('[JARVIS] Firestore "' + nome + '":', err.code, err.message);
+        sbRight('DB: ERRO ' + err.code);
+      }
+    );
   });
 }
 
-// ════════════════════════════════════════════════════════
-// FIX 3 — MICROFONE: solicita permissão via getUserMedia
-//          ANTES de criar SpeechRecognition, garantindo
-//          que o browser mostre o diálogo de permissão.
-//          Só depois liga o reconhecimento contínuo.
-// ════════════════════════════════════════════════════════
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition  = null;
-let isProcessing = false;
-let micActive    = false;
-let micPermission = 'unknown'; // 'granted' | 'denied' | 'unknown'
+function sbRight(txt) { document.getElementById('sb-right').textContent = txt; }
 
-async function solicitarMicrofone() {
-  // Fecha overlay
-  document.getElementById('mic-overlay').classList.remove('visible');
+// ════════════════════════════════════════════════════
+// MOBILE — overlay de instalacao
+// ════════════════════════════════════════════════════
+function verificarMobile() {
+  if (!IS_MOBILE) return false;
+  // Ja instalado como PWA (standalone) — nao exibe overlay
+  if (window.matchMedia('(display-mode: standalone)').matches) return false;
+
+  // Mostra botao tap-to-talk
+  document.getElementById('tap-btn').style.display = 'flex';
+
+  const steps = document.getElementById('mo-steps');
+  if (IS_IOS) {
+    steps.innerHTML =
+      '<b>📱 Instalar no iPhone / iPad:</b><br>' +
+      '1. Abra esta pagina no <b>Safari</b><br>' +
+      '2. Toque em <b>Compartilhar ↑</b><br>' +
+      '3. Toque em <b>"Adicionar a Tela de Inicio"</b><br>' +
+      '4. Confirme tocando em <b>Adicionar</b><br><br>' +
+      '<b>⚠️ Obrigatorio usar Safari no iOS</b>';
+  } else if (IS_ANDROID) {
+    steps.innerHTML =
+      '<b>📱 Instalar no Android:</b><br>' +
+      '1. Abra no <b>Chrome</b><br>' +
+      '2. Toque em <b>⋮</b> menu<br>' +
+      '3. Toque em <b>"Adicionar a tela inicial"</b><br>' +
+      '&nbsp;&nbsp;&nbsp;ou <b>"Instalar aplicativo"</b><br>' +
+      '4. Confirme a instalacao';
+  } else {
+    steps.innerHTML =
+      '<b>Dispositivo movel detectado.</b><br>' +
+      'Use Chrome no Android ou Safari no iOS<br>' +
+      'para melhor suporte ao microfone.';
+  }
+
+  document.getElementById('mobile-overlay').classList.add('visible');
+  return true;
+}
+
+function dispensarMobile() {
+  document.getElementById('mobile-overlay').classList.remove('visible');
+  document.getElementById('activate-overlay').classList.add('visible');
+}
+
+// ════════════════════════════════════════════════════
+// FIX #3 — MICROFONE: getUserMedia com gesto do usuario
+// CORRECAO CRITICA: Chrome bloqueia mic sem clique previo
+// Este botao e obrigatorio — nao ha como contornar
+// ════════════════════════════════════════════════════
+async function ativarSistema() {
+  const denied = document.getElementById('ao-denied');
+  denied.style.display = 'none';
+
+  // Fallback: browsers sem getUserMedia (muito antigo)
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    console.warn('[JARVIS] getUserMedia indisponivel — tentando sem pre-auth');
+    document.getElementById('activate-overlay').classList.remove('visible');
+    micPermission = 'granted';
+    await boasVindas();
+    return;
+  }
 
   try {
-    // FIX: pede permissão explicitamente com getUserMedia primeiro
-    // Isso garante que o browser exiba o popup de permissão
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // Para o stream imediatamente — só precisávamos da permissão
+    // PEDE PERMISSAO: isso dispara o popup do browser
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    // Para o stream — so precisavamos do grant
     stream.getTracks().forEach(t => t.stop());
     micPermission = 'granted';
-    showTranscript('🎤 Microfone autorizado — diga "Jarvis" para ativar');
-    iniciarReconhecimento();
+    console.log('[JARVIS] Microfone autorizado via getUserMedia');
+    document.getElementById('activate-overlay').classList.remove('visible');
+    await boasVindas();
   } catch(err) {
     micPermission = 'denied';
-    console.warn('[JARVIS] Permissão de microfone negada:', err);
-    showTranscript('❌ Microfone bloqueado. Clique em 🎤 FALAR para tentar novamente.');
-    setState('idle');
-    // Mostra overlay novamente para o usuário entender o que fazer
-    setTimeout(() => {
-      document.getElementById('mic-overlay').classList.add('visible');
-    }, 3000);
+    console.error('[JARVIS] getUserMedia negado:', err.name, '-', err.message);
+    denied.style.display = 'block';
+    showTranscript('❌ Microfone bloqueado — siga as instrucoes na tela');
   }
 }
 
+// ════════════════════════════════════════════════════
+// FIX #4 — SPEECHRECOGNITION
+// Desktop: modo continuo (fica ouvindo sempre)
+// Mobile iOS: modo tap-to-talk (iOS nao suporta continuo)
+// Mobile Android: tap-to-talk tambem (mais estavel)
+// ════════════════════════════════════════════════════
 function iniciarReconhecimento() {
   if (!SR) {
-    console.warn('[JARVIS] SpeechRecognition não suportado neste browser');
-    showTranscript('❌ Reconhecimento de voz não suportado. Use Chrome ou Edge.');
-    return;
-  }
-  if (recognition) {
-    // Já existe — apenas reinicia
-    try { recognition.start(); } catch(e) {}
+    showTranscript('❌ Reconhecimento de voz nao suportado. Use Chrome ou Edge.');
     return;
   }
 
+  // iOS: tap-to-talk (continuo e muito instavel no iOS Safari)
+  if (IS_IOS) {
+    console.log('[JARVIS] iOS — modo tap-to-talk');
+    showTranscript('Toque no 🎤 para falar com JARVIS');
+    return;
+  }
+
+  // Android: prefere tap-to-talk tambem
+  if (IS_ANDROID) {
+    console.log('[JARVIS] Android — modo tap-to-talk');
+    showTranscript('Toque no 🎤 para falar com JARVIS');
+    return;
+  }
+
+  // Desktop: modo continuo
+  if (recognition) { try { recognition.abort(); } catch(e) {} }
+
   recognition = new SR();
-  recognition.lang            = 'pt-BR';
-  recognition.continuous      = true;
-  recognition.interimResults  = true;
+  recognition.lang           = 'pt-BR';
+  recognition.continuous     = true;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
-    clearTimeout(window._micIdleTimer);
     micActive = true;
+    clearTimeout(window._micIdleTimer);
     setState('listening');
-    window._micIdleTimer = setTimeout(() => {
-      if (!isProcessing) setState('idle');
-    }, 2000);
+    window._micIdleTimer = setTimeout(() => { if (!isProcessing) setState('idle'); }, 2500);
   };
 
   recognition.onspeechstart = () => {
@@ -665,424 +704,381 @@ function iniciarReconhecimento() {
   };
 
   recognition.onspeechend = () => {
-    if (!isProcessing)
-      window._micIdleTimer = setTimeout(() => setState('idle'), 1000);
+    if (!isProcessing) window._micIdleTimer = setTimeout(() => setState('idle'), 1200);
   };
 
   recognition.onresult = (e) => {
     let interim = '', final = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final  += e.results[i][0].transcript;
+      if (e.results[i].isFinal) final   += e.results[i][0].transcript;
       else                       interim += e.results[i][0].transcript;
     }
     const txt = (interim || final).trim();
     if (txt) showTranscript('"' + txt + '"');
-
     if (final && !isProcessing) {
       const lower = final.toLowerCase();
       if (lower.includes('jarvis')) {
-        const cmd = final.replace(/jarvis/gi,'').trim();
-        if (cmd.length > 2) {
-          processar(cmd);
-        } else {
-          falar('Prontíssimo, Senhor. Em que posso ajudá-lo?');
-          setState('speaking');
-        }
+        const cmd = final.replace(/jarvis/gi, '').trim();
+        if (cmd.length > 2) processar(cmd);
+        else falar('Prontissimo, Senhor. Em que posso ajuda-lo?');
       }
     }
   };
 
   recognition.onerror = (e) => {
-    console.warn('[JARVIS] Mic error:', e.error);
+    console.warn('[JARVIS] SR error:', e.error);
     micActive = false;
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
       micPermission = 'denied';
-      showTranscript('❌ Permissão de microfone negada. Clique em 🎤 FALAR.');
+      showTranscript('❌ Microfone bloqueado.');
       setState('idle');
-    } else if (e.error !== 'aborted') {
-      // Outros erros: reinicia após delay
-      setTimeout(() => {
-        if (!isProcessing) { try { recognition.start(); } catch(err){} }
-      }, 1000);
+      document.getElementById('activate-overlay').classList.add('visible');
+      return;
     }
+    if (e.error === 'aborted') return;
+    // network, no-speech, audio-capture — reinicia apos delay
+    setTimeout(() => {
+      if (!isProcessing && micPermission === 'granted') {
+        try { recognition && recognition.start(); } catch(ex) {}
+      }
+    }, 1200);
   };
 
   recognition.onend = () => {
     micActive = false;
     setState('idle');
-    // Mantém microfone sempre aberto (menos se permissão negada ou processando)
-    if (!isProcessing && micPermission !== 'denied') {
+    // Mantém sempre aberto no desktop
+    if (!isProcessing && micPermission === 'granted') {
       setTimeout(() => {
-        try { recognition.start(); }
-        catch(e) { console.warn('[JARVIS] Restart mic:', e); }
-      }, 400);
+        try { recognition && recognition.start(); } catch(ex) {}
+      }, 500);
     }
   };
 
   try {
     recognition.start();
-    console.log('[JARVIS] Reconhecimento de voz iniciado');
+    console.log('[JARVIS] SpeechRecognition iniciado (continuo)');
   } catch(e) {
-    console.warn('[JARVIS] Erro ao iniciar reconhecimento:', e);
+    console.error('[JARVIS] Falha ao iniciar recognition:', e);
   }
 }
 
-// FIX 4 — manualListen: tenta getUserMedia se permissão ainda não concedida
-function manualListen() {
-  if (micPermission === 'denied' || micPermission === 'unknown') {
-    solicitarMicrofone();
+// Mobile tap-to-talk
+function mobileTapTalk() {
+  if (isProcessing) return;
+  const btn = document.getElementById('tap-btn');
+
+  if (isTapTalking) {
+    isTapTalking = false;
+    btn.classList.remove('active');
+    btn.textContent = '🎤';
+    if (tapRec) { try { tapRec.stop(); } catch(e){} tapRec = null; }
     return;
   }
-  if (!recognition) { iniciarReconhecimento(); return; }
-  if (!micActive) {
-    try { recognition.start(); } catch(e) {}
+
+  if (!SR) { showTranscript('❌ Voz nao suportada neste browser.'); return; }
+
+  isTapTalking = true;
+  btn.classList.add('active');
+  btn.textContent = '⏹';
+  setState('listening');
+  showTranscript('Ouvindo... fale seu comando');
+
+  tapRec = new SR();
+  tapRec.lang            = 'pt-BR';
+  tapRec.continuous      = false;
+  tapRec.interimResults  = true;
+  tapRec.maxAlternatives = 1;
+
+  tapRec.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final   += e.results[i][0].transcript;
+      else                       interim += e.results[i][0].transcript;
+    }
+    if ((interim||final).trim()) showTranscript('"' + (interim||final).trim() + '"');
+    if (final && !isProcessing) processar(final.trim());
+  };
+
+  tapRec.onerror = (e) => {
+    console.warn('[JARVIS] tapRec error:', e.error);
+    isTapTalking = false;
+    btn.classList.remove('active');
+    btn.textContent = '🎤';
+    setState('idle');
+    if (e.error === 'not-allowed') {
+      document.getElementById('activate-overlay').classList.add('visible');
+    }
+  };
+
+  tapRec.onend = () => {
+    isTapTalking = false;
+    btn.classList.remove('active');
+    btn.textContent = '🎤';
+    if (!isProcessing) setState('idle');
+    tapRec = null;
+  };
+
+  try { tapRec.start(); }
+  catch(e) {
+    isTapTalking = false;
+    btn.classList.remove('active');
+    btn.textContent = '🎤';
+    setState('idle');
+    console.error('[JARVIS] tapRec start:', e);
   }
+}
+
+// Botao manual
+function manualListen() {
+  if (micPermission !== 'granted') {
+    document.getElementById('activate-overlay').classList.add('visible');
+    return;
+  }
+  if (IS_MOBILE) { mobileTapTalk(); return; }
+  if (!recognition) { iniciarReconhecimento(); return; }
+  if (!micActive) { try { recognition.start(); } catch(e){} }
   setState('listening');
   showTranscript('Ouvindo... diga "Jarvis" seguido do seu comando');
 }
 
-// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 // ESTADOS
-// ════════════════════════════════════════════════════════
-const LABELS = {
-  idle: 'AGUARDANDO',
-  listening: 'OUVINDO',
-  thinking: 'PROCESSANDO',
-  speaking: 'RESPONDENDO'
-};
-
+// ════════════════════════════════════════════════════
+const STATE_LABELS = { idle:'AGUARDANDO', listening:'OUVINDO', thinking:'PROCESSANDO', speaking:'RESPONDENDO' };
 function setState(s) {
   document.body.className = s === 'idle' ? '' : s;
-  document.getElementById('state-label').textContent = LABELS[s] || 'AGUARDANDO';
+  const el = document.getElementById('state-label');
+  if (el) el.textContent = STATE_LABELS[s] || 'AGUARDANDO';
 }
-
 function showTranscript(txt) {
   const el = document.getElementById('transcript');
-  el.textContent = txt;
-  el.style.opacity = '1';
+  if (!el) return;
+  el.textContent = txt; el.style.opacity = '1';
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.opacity = '0'; }, 5000);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 5500);
 }
 
-// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 // GROQ API
-// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 async function perguntarGroq(pergunta) {
   const prod = dbData.producao || [];
   const acm  = dbData.acmSafra || [];
-
-  const ctx = {
-    producao: { total_registros: prod.length, amostra: prod.slice(0,3) },
-    acmSafra: { total_registros: acm.length,  amostra: acm.slice(0,3) },
+  const ctx  = {
+    producao: { total_registros: prod.length, amostra: prod.slice(0,4) },
+    acmSafra: { total_registros: acm.length,  amostra: acm.slice(0,4) }
   };
-
-  const sys = `Você é JARVIS, assistente de IA da AgroAnalytics da Usina Pitangueiras.
-Responda SEMPRE em português. Tom: formal, elegante, preciso — como o Jarvis do Iron Man.
-Use "Senhor" para se referir ao usuário.
-Seja CONCISO: máximo 3 parágrafos ou uma lista curta.
-Se tiver dados numéricos relevantes, apresente-os claramente.
-Se não tiver dados suficientes, diga com elegância.
-
-DADOS DISPONÍVEIS:
-${JSON.stringify(ctx, null, 2)}`;
+  const sys =
+    'Voce e JARVIS, assistente de IA da AgroAnalytics da Usina Pitangueiras.\n' +
+    'Responda SEMPRE em portugues. Tom: formal, elegante e preciso.\n' +
+    'Use "Senhor" para se referir ao usuario.\n' +
+    'Seja CONCISO: maximo 3 paragrafos ou lista curta.\n' +
+    'Se dados numericos disponiveis, apresente claramente.\n\n' +
+    'DADOS:\n' + JSON.stringify(ctx, null, 2);
 
   const msgs = [
-    { role:'system',  content: sys },
+    { role:'system', content: sys },
     ...chatHistory.slice(-8),
-    { role:'user',    content: pergunta }
+    { role:'user',   content: pergunta }
   ];
 
   const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${GROQ_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: msgs,
-      max_tokens: 600,
-      temperature: 0.7
-    })
+    headers: { 'Authorization':'Bearer ' + GROQ_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ model:'llama-3.3-70b-versatile', messages: msgs, max_tokens:600, temperature:0.7 })
   });
-  if (!r.ok) throw new Error(`Groq ${r.status}: ${await r.text()}`);
-  const d = await r.json();
-  return d.choices[0].message.content;
+  if (!r.ok) throw new Error('Groq ' + r.status + ': ' + await r.text());
+  return (await r.json()).choices[0].message.content;
 }
 
-// ════════════════════════════════════════════════════════
-// PROCESSAR PERGUNTA
-// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// PROCESSAR
+// ════════════════════════════════════════════════════
 async function processar(pergunta) {
   if (isProcessing) return;
   isProcessing = true;
-
-  // Para o mic durante processamento para evitar eco
-  if (recognition && micActive) {
-    try { recognition.stop(); } catch(e) {}
-  }
-
+  // Para mic durante processamento (evita eco)
+  if (recognition && micActive) { try { recognition.stop(); } catch(e){} }
   setState('thinking');
   showTranscript('Processando: "' + pergunta + '"');
 
   try {
     const resp = await perguntarGroq(pergunta);
-    chatHistory.push({ role:'user',      content: pergunta });
+    chatHistory.push({ role:'user', content: pergunta });
     chatHistory.push({ role:'assistant', content: resp });
     if (chatHistory.length > 16) chatHistory = chatHistory.slice(-16);
-
-    mostrarCard(resp, pergunta);
+    mostrarCard(resp);
     setState('speaking');
     await falar(resp);
     setState('idle');
-
   } catch(e) {
-    console.error('[JARVIS] Erro:', e);
-    const msg = 'Peço desculpas, Senhor. Houve uma falha na conexão neural. Por favor, tente novamente.';
-    mostrarCard(msg, pergunta);
+    console.error('[JARVIS]', e);
+    const msg = 'Peco desculpas, Senhor. Houve uma falha na conexao neural. Tente novamente.';
+    mostrarCard(msg);
     await falar(msg);
     setState('idle');
   }
 
   isProcessing = false;
-
-  // Reinicia microfone após processar
-  if (micPermission === 'granted') {
-    setTimeout(() => {
-      if (!micActive) {
-        try { recognition && recognition.start(); }
-        catch(e) {}
-      }
-    }, 600);
+  // Retoma mic desktop
+  if (!IS_MOBILE && micPermission === 'granted') {
+    setTimeout(() => { if (!micActive) { try { recognition && recognition.start(); } catch(e){} } }, 700);
   }
 }
 
 async function perguntarResumoDados() {
-  await processar('Faça um resumo executivo completo dos dados de produção disponíveis, incluindo totais, métricas principais e insights relevantes.');
+  await processar('Faca um resumo executivo completo dos dados de producao, incluindo totais, metricas principais e insights relevantes.');
 }
 
-// ════════════════════════════════════════════════════════
-// CARD DE RESPOSTA
-// ════════════════════════════════════════════════════════
-function mostrarCard(texto, pergunta) {
+// ════════════════════════════════════════════════════
+// CARD
+// ════════════════════════════════════════════════════
+function mostrarCard(texto) {
   document.getElementById('rc-text').textContent = texto;
-
-  const metricsEl = document.getElementById('rc-metrics');
-  metricsEl.innerHTML = '';
-
-  const prod = dbData.producao || [];
-  if (prod.length > 0) {
+  const el = document.getElementById('rc-metrics');
+  el.innerHTML = '';
+  if ((dbData.producao||[]).length > 0) {
     extrairMetricas().forEach(m => {
-      const box = document.createElement('div');
-      box.className = 'metric-box';
-      box.innerHTML = `
-        <div class="mb-label">${m.label}</div>
-        <div class="mb-val">${m.val}</div>
-        <div class="mb-sub">${m.sub}</div>`;
-      metricsEl.appendChild(box);
+      const b = document.createElement('div');
+      b.className = 'metric-box';
+      b.innerHTML = '<div class="mb-label">'+m.label+'</div><div class="mb-val">'+m.val+'</div><div class="mb-sub">'+m.sub+'</div>';
+      el.appendChild(b);
     });
   }
-
   document.getElementById('response-card').classList.add('visible');
 }
-
 function extrairMetricas() {
-  const prod = dbData.producao || [];
+  const prod = dbData.producao||[];
   if (!prod.length) return [];
-  const metrics = [];
-
-  metrics.push({ label:'VIAGENS', val: prod.length.toLocaleString('pt-BR'), sub: 'registros' });
-
-  const somaPeso = prod.reduce((a,d) => {
-    const v = parseFloat(String(d['Peso Líquido']||d['pesoLiquido']||'0').replace(',','.'));
-    return a + (isNaN(v) ? 0 : v);
-  }, 0);
-  if (somaPeso > 0)
-    metrics.push({ label:'PRODUÇÃO', val: (somaPeso/1000).toFixed(1)+'k t', sub: 'total' });
-
-  const proprias = prod.filter(d => {
-    const c = String(d.CodEquip||d.codEquip||d.equipamento||'');
-    return c.startsWith('31')||c.startsWith('32')||c.startsWith('80');
-  }).length;
-  if (proprias > 0)
-    metrics.push({ label:'PRÓPRIAS', val: proprias.toLocaleString('pt-BR'), sub: 'viagens' });
-
-  const acm = dbData.acmSafra || [];
-  if (acm.length > 0)
-    metrics.push({ label:'ACM SAFRA', val: acm.length+' reg', sub: 'acumulado' });
-
-  return metrics.slice(0,4);
+  const m = [];
+  m.push({ label:'VIAGENS', val:prod.length.toLocaleString('pt-BR'), sub:'registros' });
+  const sp = prod.reduce((a,d) => { const v=parseFloat(String(d['Peso Liquido']||d['pesoLiquido']||'0').replace(',','.')); return a+(isNaN(v)?0:v); }, 0);
+  if (sp>0) m.push({ label:'PRODUCAO', val:(sp/1000).toFixed(1)+'k t', sub:'total' });
+  const pr = prod.filter(d => { const c=String(d.CodEquip||d.codEquip||d.equipamento||''); return c.startsWith('31')||c.startsWith('32')||c.startsWith('80'); }).length;
+  if (pr>0) m.push({ label:'PROPRIAS', val:pr.toLocaleString('pt-BR'), sub:'viagens' });
+  const acm=dbData.acmSafra||[];
+  if (acm.length) m.push({ label:'ACM SAFRA', val:acm.length+' reg', sub:'acumulado' });
+  return m.slice(0,4);
 }
+function closeCard() { document.getElementById('response-card').classList.remove('visible'); }
 
-function closeCard() {
-  document.getElementById('response-card').classList.remove('visible');
+// ════════════════════════════════════════════════════
+// FIX #5 — TTS: aguarda vozes + workaround Chrome background
+// ════════════════════════════════════════════════════
+function carregarVozes() {
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { resolve(); return; }
+    if (window.speechSynthesis.getVoices().length > 0) { resolve(); return; }
+    const tid = setTimeout(resolve, 2500);
+    window.speechSynthesis.onvoiceschanged = () => {
+      clearTimeout(tid);
+      window.speechSynthesis.onvoiceschanged = null;
+      resolve();
+    };
+  });
 }
-
-// ════════════════════════════════════════════════════════
-// FIX 5 — SÍNTESE DE VOZ: aguarda voices carregar corretamente
-// ════════════════════════════════════════════════════════
-function getVoicePtBR() {
-  const voices = window.speechSynthesis.getVoices();
-  // Prioridade: Google pt-BR → qualquer pt-BR → qualquer pt
-  return voices.find(v => v.lang === 'pt-BR' && v.name.includes('Google'))
-      || voices.find(v => v.lang === 'pt-BR')
-      || voices.find(v => v.lang.startsWith('pt'))
+function getVozPtBR() {
+  if (!window.speechSynthesis) return null;
+  const vs = window.speechSynthesis.getVoices();
+  return vs.find(v => v.lang==='pt-BR' && /Google/.test(v.name))
+      || vs.find(v => v.lang==='pt-BR')
+      || vs.find(v => v.lang.startsWith('pt'))
       || null;
 }
-
 function falar(txt) {
   return new Promise(resolve => {
     if (!window.speechSynthesis) { resolve(); return; }
     window.speechSynthesis.cancel();
-    const limpo = txt.replace(/[*#_◆▶⬡\[\]]/g,'').substring(0, 500);
+    const limpo = txt.replace(/[*#_◆▶⬡\[\]]/g,'').substring(0,500);
     const utt   = new SpeechSynthesisUtterance(limpo);
-    utt.lang    = 'pt-BR';
-    utt.rate    = 1.05;
-    utt.pitch   = 1.0;
-    utt.volume  = 1;
-
-    const voice = getVoicePtBR();
-    if (voice) utt.voice = voice;
-
-    utt.onend   = resolve;
-    utt.onerror = resolve;
-
-    // Workaround: Chrome às vezes congela speechSynthesis — garante execução
+    utt.lang    = 'pt-BR'; utt.rate = 1.05; utt.pitch = 1.0; utt.volume = 1;
+    const voz   = getVozPtBR(); if (voz) utt.voice = voz;
+    let done = false;
+    const end = () => { if (!done) { done=true; clearTimeout(safeTid); clearInterval(waId); resolve(); } };
+    utt.onend   = end;
+    utt.onerror = end;
+    // Timeout de segurança 35s
+    const safeTid = setTimeout(() => { window.speechSynthesis.cancel(); end(); }, 35000);
+    // Workaround: Chrome pausa TTS em abas em segundo plano
+    const waId = setInterval(() => {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      if (done) clearInterval(waId);
+    }, 8000);
     window.speechSynthesis.speak(utt);
-
-    // Timeout de segurança (30s máximo)
-    const timeout = setTimeout(() => {
-      window.speechSynthesis.cancel();
-      resolve();
-    }, 30000);
-    utt.onend = () => { clearTimeout(timeout); resolve(); };
   });
 }
 
-// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 // CURSOR
-// ════════════════════════════════════════════════════════
-let cx=0, cy=0, tx=0, ty=0;
+// ════════════════════════════════════════════════════
+let cx=0,cy=0,tx=0,ty=0;
 document.addEventListener('mousemove', e => { tx=e.clientX; ty=e.clientY; });
-(function anim() {
-  cx += (tx-cx)*0.15; cy += (ty-cy)*0.15;
-  const c = document.getElementById('cur');
-  if (c) { c.style.left=cx+'px'; c.style.top=cy+'px'; }
-  requestAnimationFrame(anim);
+(function animCur() {
+  cx+=(tx-cx)*.15; cy+=(ty-cy)*.15;
+  const c=document.getElementById('cur');
+  if(c) { c.style.left=cx+'px'; c.style.top=cy+'px'; }
+  requestAnimationFrame(animCur);
 })();
 
-// ════════════════════════════════════════════════════════
 // CLOCK
-// ════════════════════════════════════════════════════════
 setInterval(() => {
-  document.getElementById('sb-clock').textContent =
-    new Date().toLocaleTimeString('pt-BR');
+  const el=document.getElementById('sb-clock');
+  if(el) el.textContent=new Date().toLocaleTimeString('pt-BR');
 }, 1000);
 
-// ════════════════════════════════════════════════════════
-// FIX 6 — BOOT: inicia Firebase e mic na ordem certa,
-//          com mic solicitado IMEDIATAMENTE após boot
-//          (não espera TTS terminar)
-// ════════════════════════════════════════════════════════
-const bootSteps = [
+// ════════════════════════════════════════════════════
+// FIX #6 — BOOT: ordem de inicializacao correta
+// 1. Firebase (nao depende de clique)
+// 2. Verifica mobile -> mostra overlay correto
+// 3. Activate overlay -> ativarSistema() -> mic
+// 4. boasVindas() -> TTS -> iniciarReconhecimento()
+// ════════════════════════════════════════════════════
+const BOOT_STEPS = [
   'CONECTANDO AO FIREBASE...',
-  'CARREGANDO DADOS DE PRODUÇÃO...',
+  'CARREGANDO DADOS DE PRODUCAO...',
   'INICIALIZANDO GROQ NEURAL ENGINE...',
-  'CALIBRANDO RECONHECIMENTO DE VOZ...',
+  'CALIBRANDO SISTEMAS DE VOZ...',
   'TODOS OS SISTEMAS OPERACIONAIS.'
 ];
 let bi = 0;
 const bootEl    = document.getElementById('boot-txt');
 const bootTimer = setInterval(() => {
-  if (bi < bootSteps.length) {
-    bootEl.textContent = bootSteps[bi++];
+  if (bi < BOOT_STEPS.length) {
+    bootEl.textContent = BOOT_STEPS[bi++];
   } else {
     clearInterval(bootTimer);
     const boot = document.getElementById('boot');
     boot.classList.add('fade');
     setTimeout(() => {
       boot.classList.add('gone');
-      initFirebase(); // Inicia Firebase (com retry se scripts ainda carregando)
-
-      // FIX CRÍTICO: verifica se SpeechRecognition está disponível
-      if (!SR) {
-        showTranscript('⚠️ Reconhecimento de voz não suportado. Use Chrome ou Edge.');
-        boasVindasSemMic();
-        return;
+      initFirebase(); // Firebase nao precisa de clique
+      if (!verificarMobile()) {
+        // Desktop: exibe overlay de ativacao (exige clique para pedir mic)
+        document.getElementById('activate-overlay').classList.add('visible');
       }
-
-      // FIX: solicita permissão do microfone logo após o boot,
-      //      usando getUserMedia (mostra popup do browser imediatamente)
-      navigator.mediaDevices?.getUserMedia({ audio: true })
-        .then(stream => {
-          stream.getTracks().forEach(t => t.stop());
-          micPermission = 'granted';
-          console.log('[JARVIS] Permissão de microfone concedida automaticamente');
-          boasVindas(); // TTS de boas-vindas + inicia reconhecimento
-        })
-        .catch(err => {
-          console.warn('[JARVIS] getUserMedia falhou no boot:', err.name);
-          // Mostra overlay para o usuário clicar manualmente
-          document.getElementById('mic-overlay').classList.add('visible');
-          // TTS de boas-vindas sem iniciar mic
-          boasVindasSemMic();
-        });
-
     }, 900);
   }
 }, 480);
 
 async function boasVindas() {
-  const h = new Date().getHours();
-  const saud = h<12 ? 'Bom dia' : h<18 ? 'Boa tarde' : 'Boa noite';
-  const msg  = `${saud}, Senhor. JARVIS online e conectado ao AgroAnalytics. `
-              + `Diga "Jarvis" seguido do seu comando para interagir.`;
+  const h   = new Date().getHours();
+  const sd  = h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+  const mob = IS_MOBILE ? ' Toque no microfone para falar.' : ' Diga Jarvis seguido do seu comando.';
+  const msg = sd + ', Senhor. JARVIS online e conectado ao AgroAnalytics.' + mob;
   setState('speaking');
-
-  // FIX: inicia voices antes de falar
   await carregarVozes();
   await falar(msg);
   setState('idle');
-
-  // Inicia mic APÓS boas-vindas (evita capturar o próprio TTS)
+  // Inicia mic APOS o TTS (evita capturar eco)
   iniciarReconhecimento();
 }
 
-async function boasVindasSemMic() {
-  const h = new Date().getHours();
-  const saud = h<12 ? 'Bom dia' : h<18 ? 'Boa tarde' : 'Boa noite';
-  const msg  = `${saud}, Senhor. JARVIS online. Por favor, autorize o microfone para ativar os comandos de voz.`;
-  setState('speaking');
-  await carregarVozes();
-  await falar(msg);
-  setState('idle');
-}
-
-// Aguarda speechSynthesis carregar as vozes (necessário no Chrome)
-function carregarVozes() {
-  return new Promise(resolve => {
-    if (window.speechSynthesis.getVoices().length > 0) {
-      resolve();
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.onvoiceschanged = null;
-        resolve();
-      };
-      // Timeout de segurança
-      setTimeout(resolve, 2000);
-    }
-  });
-}
-
-// ════════════════════════════════════════════════════════
-// ATALHOS DE TECLADO
-// ════════════════════════════════════════════════════════
+// TECLADO
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeCard();
-  // Espaço = ativar escuta manualmente
-  if (e.key === ' ' && !isProcessing) {
-    e.preventDefault();
-    manualListen();
+  if (e.key === ' ' && !e.target.matches('input,textarea') && !isProcessing) {
+    e.preventDefault(); manualListen();
   }
 });
 </script>

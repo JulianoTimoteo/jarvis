@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — AgroAnalytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script>
+// Dynamic Firebase loader — survives file:// and slow CDN
+(function() {
+  const scripts = [
+    'https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js',
+    'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js'
+  ];
+  let loaded = 0;
+  window._firebaseReady = false;
+  window._firebaseReadyCb = [];
+  function onLoaded() {
+    loaded++;
+    if (loaded === scripts.length) {
+      window._firebaseReady = true;
+      window._firebaseReadyCb.forEach(fn => fn());
+    }
+  }
+  scripts.forEach(src => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = onLoaded;
+    s.onerror = () => {
+      console.warn('[JARVIS] Firebase CDN falhou — modo offline ativo');
+      onLoaded(); // conta mesmo com erro para não travar o boot
+    };
+    document.head.appendChild(s);
+  });
+})();
+</script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --cyan: #00f5ff;
+  --blue: #0055ff;
+  --glow: rgba(0,245,255,0.6);
+  --dim:  rgba(0,245,255,0.12);
+  --red:  #ff2244;
+  --green:#00ffaa;
+  --bg:   #000408;
+}
+
+body {
+  background: var(--bg);
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--cyan);
+  cursor: none;
+}
+
+/* ── CURSOR ── */
+#cur {
+  position: fixed; width: 24px; height: 24px;
+  border: 1px solid var(--cyan); border-radius: 50%;
+  pointer-events: none; z-index: 9999;
+  transform: translate(-50%,-50%);
+  box-shadow: 0 0 8px var(--glow);
+  transition: width .15s, height .15s;
+}
+
+/* ── SCANLINES ── */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);
+}
+
+/* ── STATUS LINE ── */
+#status-bar {
+  position: fixed; top: 0; left: 0; right: 0;
+  padding: 10px 24px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.6rem; letter-spacing: 0.2em;
+  color: rgba(0,245,255,0.4);
+  border-bottom: 1px solid rgba(0,245,255,0.08);
+  z-index: 10;
+}
+#status-bar .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 6px var(--green);
+  margin-right: 8px;
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* ── TRANSCRIPT ── */
+#transcript {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  font-size: 0.85rem; letter-spacing: 0.1em;
+  color: rgba(0,245,255,0.7);
+  text-align: center; max-width: 70vw;
+  min-height: 24px;
+  z-index: 10;
+  transition: opacity .3s;
+}
+
+/* ── RESPONSE CARD ── */
+#response-card {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, 90vw);
+  background: rgba(0,8,20,0.96);
+  border: 1px solid rgba(0,245,255,0.2);
+  border-radius: 8px;
+  padding: 28px 32px;
+  z-index: 50;
+  display: none;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 0 60px rgba(0,245,255,0.08), 0 40px 80px rgba(0,0,0,0.8);
+}
+#response-card.visible { display: block; animation: card-in .3s ease; }
+@keyframes card-in { from { opacity:0; transform:translate(-50%,-48%); } to { opacity:1; transform:translate(-50%,-50%); } }
+
+#response-card .rc-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.55rem; letter-spacing: 0.3em;
+  color: rgba(0,245,255,0.5); margin-bottom: 16px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+#response-card .rc-close {
+  cursor: pointer; color: rgba(0,245,255,0.4);
+  font-size: 1rem; line-height: 1;
+  transition: color .2s;
+}
+#response-card .rc-close:hover { color: var(--red); }
+#response-card .rc-body {
+  font-size: 0.78rem; line-height: 1.8;
+  color: #c0ecff;
+  white-space: pre-wrap;
+}
+
+/* ── METRICS GRID (inside response card) ── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.metric-box {
+  background: rgba(0,245,255,0.04);
+  border: 1px solid rgba(0,245,255,0.15);
+  border-radius: 4px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.metric-box .mb-label {
+  font-size: 0.48rem; letter-spacing: 0.15em;
+  color: rgba(0,245,255,0.45); text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.metric-box .mb-val {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.2rem; font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 12px var(--cyan);
+}
+.metric-box .mb-sub {
+  font-size: 0.46rem; color: rgba(0,245,255,0.35); margin-top: 3px;
+}
+
+/* ── CENTER STAGE ── */
+#stage {
+  position: relative;
+  width: 380px; height: 380px;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10;
+}
+
+/* ── ARC REACTOR ── */
+#arc {
+  position: relative;
+  width: 240px; height: 240px;
+}
+
+/* Outer rings — pure CSS animated SVG */
+#arc svg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+}
+
+/* Core glow circle */
+#arc-core {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #00f5ff 35%, transparent 70%);
+  box-shadow:
+    0 0 20px 8px rgba(0,245,255,0.9),
+    0 0 50px 20px rgba(0,245,255,0.5),
+    0 0 100px 40px rgba(0,100,255,0.3);
+  animation: core-idle 3s ease-in-out infinite;
+  transition: all .3s;
+}
+
+/* Listening state */
+body.listening #arc-core {
+  animation: core-listen 0.6s ease-in-out infinite alternate;
+}
+body.speaking #arc-core {
+  animation: core-speak 0.4s ease-in-out infinite alternate;
+}
+body.thinking #arc-core {
+  animation: core-think 1s ease-in-out infinite;
+}
+
+@keyframes core-idle {
+  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.85; }
+  50% { transform: translate(-50%,-50%) scale(1.05); opacity: 1; }
+}
+@keyframes core-listen {
+  from { transform: translate(-50%,-50%) scale(0.95); box-shadow: 0 0 20px 8px rgba(0,245,255,0.9), 0 0 50px 20px rgba(0,245,255,0.5), 0 0 100px 40px rgba(0,100,255,0.3); }
+  to   { transform: translate(-50%,-50%) scale(1.15); box-shadow: 0 0 30px 15px rgba(0,245,255,1), 0 0 80px 35px rgba(0,245,255,0.7), 0 0 140px 60px rgba(0,100,255,0.5); }
+}
+@keyframes core-speak {
+  from { transform: translate(-50%,-50%) scale(1); box-shadow: 0 0 20px 8px rgba(0,255,100,0.8), 0 0 50px 20px rgba(0,255,100,0.4); }
+  to   { transform: translate(-50%,-50%) scale(1.12); box-shadow: 0 0 35px 15px rgba(0,255,100,1), 0 0 80px 35px rgba(0,255,100,0.6); }
+}
+@keyframes core-think {
+  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
+  50% { transform: translate(-50%,-50%) scale(1.08); opacity: 1; }
+}
+
+/* Ring animations */
+.ring-outer { animation: ring-cw 8s linear infinite; }
+.ring-mid   { animation: ring-ccw 5s linear infinite; }
+.ring-inner { animation: ring-cw 3s linear infinite; }
+.ring-hex   { animation: ring-cw 12s linear infinite; }
+
+body.listening .ring-outer { animation-duration: 3s; }
+body.listening .ring-mid   { animation-duration: 1.5s; }
+body.listening .ring-inner { animation-duration: 0.8s; }
+body.speaking  .ring-outer { animation-duration: 2s; }
+body.speaking  .ring-mid   { animation-duration: 1s; }
+body.speaking  .ring-inner { animation-duration: 0.5s; }
+body.thinking  .ring-outer { animation-duration: 4s; }
+body.thinking  .ring-mid   { animation-duration: 2.5s; }
+body.thinking  .ring-inner { animation-duration: 1.5s; }
+
+@keyframes ring-cw  { to { transform: rotate(360deg); transform-origin: center; } }
+@keyframes ring-ccw { to { transform: rotate(-360deg); transform-origin: center; } }
+
+/* State label */
+#state-label {
+  position: absolute;
+  bottom: -48px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Orbitron', monospace;
+  font-size: 0.6rem; letter-spacing: 0.4em;
+  color: rgba(0,245,255,0.5);
+  white-space: nowrap;
+  transition: all .3s;
+}
+body.listening #state-label { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
+body.speaking  #state-label { color: var(--green); text-shadow: 0 0 10px var(--green); }
+body.thinking  #state-label { color: rgba(0,245,255,0.7); }
+
+/* Pulse rings (appear on listen) */
+.pulse-ring {
+  position: absolute; top:50%; left:50%;
+  transform: translate(-50%,-50%);
+  width: 240px; height: 240px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,245,255,0.3);
+  opacity: 0;
+  pointer-events: none;
+}
+body.listening .pulse-ring:nth-child(1) { animation: pulse-out 2s ease-out infinite; }
+body.listening .pulse-ring:nth-child(2) { animation: pulse-out 2s ease-out infinite 0.6s; }
+body.listening .pulse-ring:nth-child(3) { animation: pulse-out 2s ease-out infinite 1.2s; }
+body.speaking  .pulse-ring:nth-child(1) { animation: pulse-out 1s ease-out infinite; }
+body.speaking  .pulse-ring:nth-child(2) { animation: pulse-out 1s ease-out infinite 0.3s; }
+body.speaking  .pulse-ring:nth-child(3) { animation: pulse-out 1s ease-out infinite 0.6s; }
+
+@keyframes pulse-out {
+  0%   { transform:translate(-50%,-50%) scale(1); opacity:0.5; }
+  100% { transform:translate(-50%,-50%) scale(2.5); opacity:0; }
+}
+
+/* ── BOTTOM BAR ── */
+#bottom-hint {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 16px 24px;
+  display: flex; justify-content: center; align-items: center;
+  gap: 32px;
+  font-size: 0.52rem; letter-spacing: 0.15em;
+  color: rgba(0,245,255,0.25);
+  border-top: 1px solid rgba(0,245,255,0.06);
+  z-index: 10;
+}
+#bottom-hint span { cursor: pointer; transition: color .2s; }
+#bottom-hint span:hover { color: var(--cyan); }
+
+/* ── BOOT OVERLAY ── */
+#boot {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  transition: opacity .8s;
+}
+#boot.fade { opacity: 0; pointer-events: none; }
+#boot.gone { display: none; }
+.boot-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(2rem,8vw,5rem); font-weight: 900;
+  letter-spacing: 0.5em;
+  color: var(--cyan);
+  text-shadow: 0 0 40px var(--cyan), 0 0 100px rgba(0,245,255,0.4);
+}
+.boot-sub {
+  font-size: 0.58rem; letter-spacing: 0.3em;
+  color: rgba(0,245,255,0.4);
+}
+.boot-progress {
+  width: 200px; height: 1px;
+  background: rgba(0,245,255,0.1);
+  position: relative; overflow: hidden;
+}
+.boot-progress::after {
+  content: ''; position: absolute; inset-block: 0; left: 0;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  box-shadow: 0 0 8px var(--cyan);
+  animation: boot-fill 2.5s ease forwards;
+}
+@keyframes boot-fill { to { width: 100%; } }
+</style>
+</head>
+<body>
+
+<!-- Boot -->
+<div id="boot">
+  <div class="boot-title">JARVIS</div>
+  <div class="boot-sub" id="boot-txt">INITIALIZING SYSTEMS...</div>
+  <div class="boot-progress"></div>
+</div>
+
+<!-- Custom cursor -->
+<div id="cur"></div>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <span><span class="dot"></span><span id="sb-left">SISTEMAS ONLINE</span></span>
+  <span id="sb-clock">00:00:00</span>
+  <span id="sb-right">DB: — REG</span>
+</div>
+
+<!-- Center stage -->
+<div id="stage">
+  <!-- Pulse rings -->
+  <div class="pulse-ring"></div>
+  <div class="pulse-ring"></div>
+  <div class="pulse-ring"></div>
+
+  <!-- Arc reactor SVG -->
+  <div id="arc">
+    <!-- Outer decorative ring -->
+    <svg viewBox="0 0 240 240" class="ring-hex" style="position:absolute;inset:0;width:100%;height:100%">
+      <polygon points="120,8 218,62 218,178 120,232 22,178 22,62" fill="none" stroke="rgba(0,245,255,0.08)" stroke-width="1"/>
+      <polygon points="120,20 206,68 206,172 120,220 34,172 34,68" fill="none" stroke="rgba(0,245,255,0.06)" stroke-width="0.5"/>
+    </svg>
+
+    <!-- Ring outer -->
+    <svg viewBox="0 0 240 240" class="ring-outer" style="position:absolute;inset:0;width:100%;height:100%">
+      <circle cx="120" cy="120" r="110" fill="none" stroke="rgba(0,245,255,0.12)" stroke-width="1"/>
+      <circle cx="120" cy="120" r="110" fill="none" stroke="url(#g1)"
+        stroke-width="2" stroke-dasharray="80 614" stroke-linecap="round"/>
+      <circle cx="120" cy="120" r="110" fill="none" stroke="url(#g1)"
+        stroke-width="1.5" stroke-dasharray="30 664" stroke-dashoffset="200" stroke-linecap="round"/>
+      <!-- tick marks -->
+      <g stroke="rgba(0,245,255,0.3)" stroke-width="1">
+        <line x1="120" y1="10" x2="120" y2="22"/>
+        <line x1="120" y1="218" x2="120" y2="230"/>
+        <line x1="10" y1="120" x2="22" y2="120"/>
+        <line x1="218" y1="120" x2="230" y2="120"/>
+      </g>
+      <defs>
+        <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#0055ff"/>
+          <stop offset="100%" stop-color="#00f5ff"/>
+        </linearGradient>
+      </defs>
+    </svg>
+
+    <!-- Ring mid -->
+    <svg viewBox="0 0 240 240" class="ring-mid" style="position:absolute;inset:0;width:100%;height:100%">
+      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,245,255,0.06)" stroke-width="1"/>
+      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,200,255,0.5)"
+        stroke-width="2" stroke-dasharray="50 503" stroke-linecap="round"/>
+      <circle cx="120" cy="120" r="88" fill="none" stroke="rgba(0,150,255,0.4)"
+        stroke-width="1" stroke-dasharray="20 533" stroke-dashoffset="150" stroke-linecap="round"/>
+      <!-- 8 dots -->
+      <g fill="rgba(0,245,255,0.4)">
+        <circle cx="120" cy="32" r="2.5"/>
+        <circle cx="180" cy="57" r="2.5"/>
+        <circle cx="208" cy="120" r="2.5"/>
+        <circle cx="180" cy="183" r="2.5"/>
+        <circle cx="120" cy="208" r="2.5"/>
+        <circle cx="60" cy="183" r="2.5"/>
+        <circle cx="32" cy="120" r="2.5"/>
+        <circle cx="60" cy="57" r="2.5"/>
+      </g>
+    </svg>
+
+    <!-- Ring inner -->
+    <svg viewBox="0 0 240 240" class="ring-inner" style="position:absolute;inset:0;width:100%;height:100%">
+      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.08)" stroke-width="1.5"/>
+      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.7)"
+        stroke-width="2.5" stroke-dasharray="25 327" stroke-linecap="round"/>
+      <circle cx="120" cy="120" r="56" fill="none" stroke="rgba(0,245,255,0.4)"
+        stroke-width="1.5" stroke-dasharray="10 342" stroke-dashoffset="100" stroke-linecap="round"/>
+      <!-- triangle inside -->
+      <polygon points="120,80 150,140 90,140" fill="none" stroke="rgba(0,245,255,0.15)" stroke-width="1"/>
+    </svg>
+
+    <!-- Core glow -->
+    <div id="arc-core"></div>
+
+    <!-- State label -->
+    <div id="state-label">AGUARDANDO</div>
+  </div>
+</div>
+
+<!-- Transcript display -->
+<div id="transcript"></div>
+
+<!-- Response card -->
+<div id="response-card">
+  <div class="rc-title">
+    <span>◆ JARVIS — RESPOSTA</span>
+    <span class="rc-close" onclick="closeCard()">✕</span>
+  </div>
+  <div class="rc-body" id="rc-text"></div>
+  <div class="metrics-grid" id="rc-metrics"></div>
+</div>
+
+<!-- Bottom hints -->
+<div id="bottom-hint">
+  <span onclick="manualListen()">🎤 FALAR COM JARVIS</span>
+  <span>◆</span>
+  <span onclick="perguntarResumoDados()">📊 RESUMO DE DADOS</span>
+  <span>◆</span>
+  <span onclick="closeCard()">✕ FECHAR</span>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// FIREBASE — lê snapshots/producao, acmSafra, metas
+// Caminhos corretos: db.collection('snapshots').doc('NOME')
+// campo: payload = JSON.stringify({cab:[...], rows:[[...]]})
+// ════════════════════════════════════════════════════════════
+const FIREBASE_CFG = {
+  apiKey: "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc",
+  authDomain: "agroanalytics-api.firebaseapp.com",
+  projectId: "agroanalytics-api",
+  storageBucket: "agroanalytics-api.firebasestorage.app",
+  messagingSenderId: "739888244342",
+  appId: "1:739888244342:web:558d620583469ec515e157"
+};
+
+const GROQ_KEY = "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";
+
+let db = null;
+let dbData = {};        // { producao:[], acmSafra:[], metas:[] }
+let chatHistory = [];
+
+// Init Firebase — aguarda carregamento dinâmico dos scripts
+function _tryInitFirebase() {
+  try {
+    if (typeof firebase === 'undefined') throw new Error('firebase not defined');
+    firebase.initializeApp(FIREBASE_CFG);
+    db = firebase.firestore();
+    firebase.auth().signInAnonymously().catch(e => console.warn('Auth:', e));
+    console.log('[JARVIS] Firebase inicializado');
+  } catch(e) {
+    console.warn('[JARVIS] Firebase offline — rodando sem dados reais:', e.message);
+    db = null;
+  }
+}
+
+if (window._firebaseReady) {
+  _tryInitFirebase();
+} else {
+  window._firebaseReadyCb = window._firebaseReadyCb || [];
+  window._firebaseReadyCb.push(_tryInitFirebase);
+}
+
+function parseSnapshot(doc) {
+  try {
+    if (!doc.exists) return [];
+    const raw = doc.data()?.payload;
+    if (!raw) return [];
+    const { cab, rows } = JSON.parse(raw);
+    if (!cab || !rows) return [];
+    return rows.map(row => Object.fromEntries(cab.map((c,i) => [c, row[i] ?? ''])));
+  } catch(e) { return []; }
+}
+
+function initFirebase() {
+  // Se Firebase ainda não estava pronto no momento do boot, tenta inicializar agora
+  if (!db && typeof firebase !== 'undefined') _tryInitFirebase();
+  if (!db) {
+    console.warn('[JARVIS] Sem Firebase — modo offline');
+    document.getElementById('sb-right').textContent = 'DB: OFFLINE';
+    document.getElementById('sb-left').textContent = 'MODO OFFLINE';
+    return;
+  }
+  ['producao','acmSafra','metas'].forEach(nome => {
+    db.collection('snapshots').doc(nome).onSnapshot(doc => {
+      dbData[nome] = parseSnapshot(doc);
+      const total = (dbData.producao||[]).length;
+      document.getElementById('sb-right').textContent = `DB: ${total.toLocaleString('pt-BR')} REG`;
+      console.log(`[JARVIS] ${nome}: ${dbData[nome].length} registros`);
+    }, e => console.warn(`[JARVIS] ${nome}:`, e));
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// SPEECH — microfone sempre aberto, ativa ao ouvir "jarvis"
+// ════════════════════════════════════════════════════════════
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isProcessing = false;
+let micActive = false;
+
+function initMic() {
+  if (!SR) { console.warn('[JARVIS] SpeechRecognition não suportado'); return; }
+  recognition = new SR();
+  recognition.lang = 'pt-BR';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    clearTimeout(window._micIdleTimer);
+    micActive = true;
+    setState('listening');
+    console.log('[JARVIS] Microfone ativo');
+    // Volta para idle visualmente após 2s sem fala
+    window._micIdleTimer = setTimeout(() => { if (!isProcessing) setState('idle'); }, 2000);
+  };
+
+  recognition.onspeechstart = () => {
+    clearTimeout(window._micIdleTimer);
+    setState('listening');
+  };
+
+  recognition.onspeechend = () => {
+    if (!isProcessing) window._micIdleTimer = setTimeout(() => setState('idle'), 1000);
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    const txt = (interim || final).trim();
+    if (txt) showTranscript('"' + txt + '"');
+
+    if (final && !isProcessing) {
+      const lower = final.toLowerCase();
+      // Ativa ao ouvir "jarvis"
+      if (lower.includes('jarvis')) {
+        const cmd = final.replace(/jarvis/i,'').trim();
+        if (cmd.length > 2) processar(cmd);
+        else { falar('Prontíssimo, Senhor. Em que posso ajudá-lo?'); setState('speaking'); }
+      }
+    }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('[JARVIS] Mic error:', e.error);
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      showTranscript('❌ Permissão de microfone negada. Libere nas configurações do browser.');
+      setState('idle');
+      micActive = false;
+    } else if (e.error === 'aborted') {
+      // Ignorar — acontece quando processamos e reiniciamos
+    } else {
+      // Outros erros: nomatch, network, audio-capture — reiniciar após delay
+      micActive = false;
+      setTimeout(() => { try { recognition.start(); } catch(err){} }, 800);
+    }
+  };
+
+  recognition.onend = () => {
+    micActive = false;
+    // Reinicia automaticamente para manter sempre aberto
+    if (!isProcessing) {
+      setTimeout(() => {
+        try { recognition.start(); }
+        catch(e) { console.warn('[JARVIS] Restart mic:', e); }
+      }, 300);
+    }
+    setState('idle');
+  };
+
+  // Inicia imediatamente
+  try { recognition.start(); }
+  catch(e) { console.warn('[JARVIS] Start mic:', e); }
+}
+
+function manualListen() {
+  if (!recognition) { initMic(); return; }
+  if (!micActive) {
+    try { recognition.start(); }
+    catch(e) {}
+  }
+  setState('listening');
+  showTranscript('Ouvindo... diga "Jarvis" seguido do seu comando');
+}
+
+// ════════════════════════════════════════════════════════════
+// ESTADOS DO ARCO REATOR
+// ════════════════════════════════════════════════════════════
+const LABELS = {
+  idle: 'AGUARDANDO',
+  listening: 'OUVINDO',
+  thinking: 'PROCESSANDO',
+  speaking: 'RESPONDENDO'
+};
+
+function setState(s) {
+  document.body.className = s === 'idle' ? '' : s;
+  document.getElementById('state-label').textContent = LABELS[s] || 'AGUARDANDO';
+}
+
+function showTranscript(txt) {
+  const el = document.getElementById('transcript');
+  el.textContent = txt;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 4000);
+}
+
+// ════════════════════════════════════════════════════════════
+// GROQ API
+// ════════════════════════════════════════════════════════════
+async function perguntarGroq(pergunta) {
+  // Monta contexto dos dados
+  const prod = dbData.producao || [];
+  const acm  = dbData.acmSafra || [];
+
+  const ctx = {
+    producao: { total_registros: prod.length, amostra: prod.slice(0,3) },
+    acmSafra: { total_registros: acm.length, amostra: acm.slice(0,3) },
+  };
+
+  const sys = `Você é JARVIS, assistente de IA da AgroAnalytics da Usina Pitangueiras.
+Responda SEMPRE em português. Tom: formal, elegante, preciso — como o Jarvis do Iron Man.
+Use "Senhor" para se referir ao usuário.
+Seja CONCISO: máximo 3 parágrafos ou uma lista curta.
+Se tiver dados numéricos relevantes, apresente-os claramente.
+Se não tiver dados suficientes, diga com elegância.
+
+DADOS DISPONÍVEIS:
+${JSON.stringify(ctx, null, 2)}`;
+
+  const msgs = [
+    { role:'system', content: sys },
+    ...chatHistory.slice(-8),
+    { role:'user', content: pergunta }
+  ];
+
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model:'llama-3.3-70b-versatile', messages: msgs, max_tokens:600, temperature:0.7 })
+  });
+  if (!r.ok) throw new Error(`Groq ${r.status}`);
+  const d = await r.json();
+  return d.choices[0].message.content;
+}
+
+// ════════════════════════════════════════════════════════════
+// PROCESSAR PERGUNTA
+// ════════════════════════════════════════════════════════════
+async function processar(pergunta) {
+  if (isProcessing) return;
+  isProcessing = true;
+  setState('thinking');
+  showTranscript('Processando: "' + pergunta + '"');
+
+  try {
+    const resp = await perguntarGroq(pergunta);
+    chatHistory.push({ role:'user', content: pergunta });
+    chatHistory.push({ role:'assistant', content: resp });
+    if (chatHistory.length > 16) chatHistory = chatHistory.slice(-16);
+
+    // Exibe no card
+    mostrarCard(resp, pergunta);
+
+    // Fala
+    setState('speaking');
+    await falar(resp);
+    setState('idle');
+
+  } catch(e) {
+    console.error('[JARVIS]', e);
+    const msg = 'Peço desculpas, Senhor. Houve uma falha na conexão neural. Tente novamente.';
+    mostrarCard(msg, pergunta);
+    await falar(msg);
+    setState('idle');
+  }
+  isProcessing = false;
+
+  // Reinicia mic se parou
+  if (recognition && !micActive) {
+    setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
+  }
+}
+
+// Atalho para resumo dos dados
+async function perguntarResumoDados() {
+  await processar('Faça um resumo executivo completo dos dados de produção disponíveis, incluindo totais, métricas principais e insights relevantes.');
+}
+
+// ════════════════════════════════════════════════════════════
+// CARD DE RESPOSTA
+// ════════════════════════════════════════════════════════════
+function mostrarCard(texto, pergunta) {
+  const card = document.getElementById('response-card');
+  document.getElementById('rc-text').textContent = texto;
+
+  // Extrai métricas numéricas da resposta para exibir em cards
+  const metricsEl = document.getElementById('rc-metrics');
+  metricsEl.innerHTML = '';
+
+  // Tenta extrair dados numéricos dos dados do Firebase para exibir
+  const prod = dbData.producao || [];
+  if (prod.length > 0) {
+    const metrics = extrairMetricas();
+    metrics.forEach(m => {
+      const box = document.createElement('div');
+      box.className = 'metric-box';
+      box.innerHTML = `<div class="mb-label">${m.label}</div><div class="mb-val">${m.val}</div><div class="mb-sub">${m.sub}</div>`;
+      metricsEl.appendChild(box);
+    });
+  }
+
+  card.classList.add('visible');
+}
+
+function extrairMetricas() {
+  const prod = dbData.producao || [];
+  if (!prod.length) return [];
+
+  const metrics = [];
+
+  // Total de viagens
+  metrics.push({ label:'VIAGENS', val: prod.length.toLocaleString('pt-BR'), sub: 'registros' });
+
+  // Soma peso líquido
+  const somaPeso = prod.reduce((a,d) => {
+    const v = parseFloat(String(d['Peso Líquido']||d['pesoLiquido']||'0').replace(',','.'));
+    return a + (isNaN(v)?0:v);
+  }, 0);
+  if (somaPeso > 0) metrics.push({ label:'PRODUÇÃO', val: (somaPeso/1000).toFixed(1)+'k t', sub: 'total' });
+
+  // Próprias vs terceiros
+  const proprias = prod.filter(d => {
+    const c = String(d.CodEquip||d.codEquip||d.equipamento||'');
+    return c.startsWith('31')||c.startsWith('32')||c.startsWith('80');
+  }).length;
+  if (proprias > 0) metrics.push({ label:'PRÓPRIAS', val: proprias.toLocaleString('pt-BR'), sub: 'viagens' });
+
+  // AcmSafra
+  const acm = dbData.acmSafra || [];
+  if (acm.length > 0) metrics.push({ label:'ACM SAFRA', val: acm.length+' reg', sub: 'acumulado' });
+
+  return metrics.slice(0,4);
+}
+
+function closeCard() {
+  document.getElementById('response-card').classList.remove('visible');
+}
+
+// ════════════════════════════════════════════════════════════
+// SÍNTESE DE VOZ
+// ════════════════════════════════════════════════════════════
+function falar(txt) {
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { resolve(); return; }
+    window.speechSynthesis.cancel();
+    // Limpa markdown e limita tamanho para TTS
+    const limpo = txt.replace(/[*#_◆▶⬡\[\]]/g,'').substring(0,500);
+    const utt = new SpeechSynthesisUtterance(limpo);
+    utt.lang = 'pt-BR'; utt.rate = 1.05; utt.pitch = 1.0; utt.volume = 1;
+    const voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('pt'));
+    if (voices.length) utt.voice = voices.find(v => v.name.includes('Google')) || voices[0];
+    utt.onend = resolve;
+    utt.onerror = resolve;
+    window.speechSynthesis.speak(utt);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// CURSOR
+// ════════════════════════════════════════════════════════════
+let cx=0,cy=0,tx=0,ty=0;
+document.addEventListener('mousemove', e => { tx=e.clientX; ty=e.clientY; });
+(function anim() {
+  cx+=(tx-cx)*0.15; cy+=(ty-cy)*0.15;
+  const c = document.getElementById('cur');
+  if(c) { c.style.left=cx+'px'; c.style.top=cy+'px'; }
+  requestAnimationFrame(anim);
+})();
+
+// ════════════════════════════════════════════════════════════
+// CLOCK
+// ════════════════════════════════════════════════════════════
+setInterval(() => {
+  document.getElementById('sb-clock').textContent =
+    new Date().toLocaleTimeString('pt-BR');
+}, 1000);
+
+// ════════════════════════════════════════════════════════════
+// BOOT SEQUENCE
+// ════════════════════════════════════════════════════════════
+const bootSteps = [
+  'CONECTANDO AO FIREBASE...',
+  'CARREGANDO DADOS DE PRODUÇÃO...',
+  'INICIALIZANDO GROQ NEURAL ENGINE...',
+  'CALIBRANDO RECONHECIMENTO DE VOZ...',
+  'TODOS OS SISTEMAS OPERACIONAIS.'
+];
+let bi = 0;
+const bootEl = document.getElementById('boot-txt');
+const bootTimer = setInterval(() => {
+  if (bi < bootSteps.length) bootEl.textContent = bootSteps[bi++];
+  else {
+    clearInterval(bootTimer);
+    const boot = document.getElementById('boot');
+    boot.classList.add('fade');
+    setTimeout(() => {
+      boot.classList.add('gone');
+      // Inicia tudo
+      initFirebase();
+      // Aguarda voices carregar
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => boasVindas();
+      } else {
+        boasVindas();
+      }
+    }, 900);
+  }
+}, 480);
+
+async function boasVindas() {
+  const h = new Date().getHours();
+  const saud = h<12 ? 'Bom dia' : h<18 ? 'Boa tarde' : 'Boa noite';
+  const msg = `${saud}, Senhor. JARVIS online e conectado ao AgroAnalytics. Microfone ativo — diga "Jarvis" seguido do seu comando.`;
+  setState('speaking');
+  await falar(msg);
+  setState('idle');
+  // Inicia mic depois das boas-vindas
+  initMic();
+}
+
+// Enter no input manual (tecla J para teste rápido)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCard();
+});
+</script>
+</body>
+</html>

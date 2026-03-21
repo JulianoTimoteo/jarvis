@@ -1,516 +1,1400 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kira — AgroAnalytics</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-    
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0a0010">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>KIRA — AgroAnalytics</title>
 
-    <style>
-        body {
-            background-color: #010409;
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            touch-action: none;
-        }
-        .font-orbitron { font-family: 'Orbitron', sans-serif; }
-        
-        #orb-container {
-            position: relative;
-            width: 240px;
-            height: 240px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            user-select: none;
-            z-index: 20;
-        }
+<!--
+  ╔══════════════════════════════════════════════════════════╗
+  ║  FIREBASE SDK — tags estáticas, sem async/defer          ║
+  ║  O browser executa em ordem antes de qualquer JS         ║
+  ║  Funciona em file://, localhost e https                  ║
+  ╚══════════════════════════════════════════════════════════╝
+-->
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
-        .orb-glow {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, transparent 70%);
-            border-radius: 50%;
-            filter: blur(25px);
-            transition: all 0.5s ease;
-        }
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 
-        .thinking .orb-glow {
-            background: radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 70%);
-            animation: pulse-glow 1s infinite alternate;
-        }
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#0a0010;
+  --pk:#ec4899; --pk2:#f472b6;
+  --teal:#2dd4bf; --sky:#38bdf8; --violet:#a78bfa;
+  --txt:rgba(220,215,235,.88); --sub:rgba(180,170,200,.42);
+  --oc:var(--pk); --og:rgba(236,72,153,.7);
+  --st:env(safe-area-inset-top,0px); --sb:env(safe-area-inset-bottom,0px);
+}
+body.s-listen{--oc:var(--sky);   --og:rgba(56,189,248,.8);}
+body.s-think {--oc:var(--violet);--og:rgba(167,139,250,.8);}
+body.s-speak {--oc:var(--teal);  --og:rgba(45,212,191,.8);}
+body.s-error {--oc:#ff1744;      --og:rgba(255,23,68,.8);}
 
-        .listening .orb-glow {
-            background: radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, transparent 70%);
-            transform: scale(1.15);
-        }
+html,body{width:100dvw;height:100dvh;overflow:hidden;background:var(--bg);
+  color:var(--txt);font-family:'Inter',sans-serif;
+  user-select:none;-webkit-touch-callout:none;}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(236,72,153,.015) 1px,transparent 1px),
+             linear-gradient(90deg,rgba(236,72,153,.015) 1px,transparent 1px);
+  background-size:60px 60px;}
 
-        .speaking .orb-glow {
-            background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
-            animation: pulse-glow 0.8s infinite alternate;
-        }
+/* ══════════ OVERLAYS BASE ══════════ */
+.overlay{position:fixed;inset:0;z-index:800;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:32px 28px calc(var(--sb)+32px);
+  background:radial-gradient(ellipse at 50% 48%,#1a0025 0%,#0a0010 68%);
+  transition:opacity .55s ease;}
+.overlay.out{opacity:0;pointer-events:none;}
+.overlay.gone{display:none;}
 
-        @keyframes pulse-glow {
-            0% { transform: scale(1); opacity: 0.3; }
-            100% { transform: scale(1.2); opacity: 0.5; }
-        }
+/* ══════════ PASSO 1 — PERMISSÃO DE MICROFONE ══════════ */
+#ov-mic{z-index:900;}
 
-        canvas {
-            position: absolute;
-            z-index: 10;
-            pointer-events: none;
-        }
+.mic-icon{
+  width:clamp(72px,18vmin,96px);height:clamp(72px,18vmin,96px);
+  border-radius:50%;
+  background:rgba(236,72,153,.12);
+  border:1.5px solid rgba(236,72,153,.35);
+  display:flex;align-items:center;justify-content:center;
+  font-size:clamp(1.8rem,6vmin,2.6rem);
+  margin-bottom:clamp(20px,4vmin,32px);
+  animation:micPop 2s ease-in-out infinite;
+  box-shadow:0 0 24px rgba(236,72,153,.2);
+}
+@keyframes micPop{0%,100%{transform:scale(1);box-shadow:0 0 24px rgba(236,72,153,.2);}
+  50%{transform:scale(1.06);box-shadow:0 0 40px rgba(236,72,153,.4);}}
 
-        .status-badge {
-            background: rgba(255, 255, 255, 0.02);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
+.ov-title{font-family:'Orbitron',monospace;font-weight:900;
+  font-size:clamp(.9rem,4vw,1.3rem);letter-spacing:.3em;
+  color:var(--pk);text-shadow:0 0 20px rgba(236,72,153,.5);
+  margin-bottom:10px;text-align:center;}
+.ov-sub{font-size:clamp(.58rem,.75rem,.68rem);letter-spacing:.08em;
+  color:rgba(220,200,235,.5);text-align:center;max-width:290px;
+  line-height:1.9;margin-bottom:clamp(24px,5vmin,36px);}
+.ov-sub b{color:rgba(236,72,153,.75);}
 
-        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(255,255,255,0.05); transition: .3s; border-radius: 20px;
-        }
-        .slider:before {
-            position: absolute; content: ""; height: 14px; width: 14px;
-            left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #ec4899; }
-        input:checked + .slider:before { transform: translateX(20px); }
+.big-btn{
+  padding:16px 48px;
+  border:1.5px solid rgba(236,72,153,.45);
+  background:rgba(236,72,153,.1);
+  color:rgba(236,72,153,.9);
+  font-family:'Orbitron',monospace;
+  font-size:clamp(.52rem,.72rem,.65rem);letter-spacing:.32em;
+  border-radius:6px;cursor:pointer;touch-action:manipulation;
+  transition:all .22s;text-transform:uppercase;
+  box-shadow:0 0 24px rgba(236,72,153,.1);
+}
+.big-btn:hover,.big-btn:active{
+  background:rgba(236,72,153,.22);
+  box-shadow:0 0 40px rgba(236,72,153,.35);
+  transform:scale(1.03);}
 
-        #card-container {
-            position: absolute; right: 30px; top: 100px; width: 260px;
-            display: flex; flex-direction: column; gap: 10px; z-index: 30; pointer-events: none;
-        }
-        .data-card {
-            background: rgba(13, 17, 23, 0.98);
-            border-left: 4px solid #ec4899;
-            padding: 14px; border-radius: 8px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-            transform: translateX(120%); opacity: 0;
-            animation: cardEnter 0.4s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        @keyframes cardEnter { to { transform: translateX(0); opacity: 1; } }
-        .data-card.fade-out { animation: cardExit 0.6s forwards ease-in; }
-        @keyframes cardExit { to { transform: translateX(150%); opacity: 0; } }
+#mic-err{margin-top:18px;font-size:.58rem;letter-spacing:.1em;
+  color:rgba(255,80,100,.7);text-align:center;
+  max-width:300px;line-height:2;display:none;}
+#mic-err a{color:rgba(255,130,150,.8);text-decoration:underline;}
 
-        #calibration-overlay { background: #010409; z-index: 1000; }
-        .log-line { font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px; }
-    </style>
+/* ══════════ PASSO 2 — BOOT / CARREGANDO DADOS ══════════ */
+#ov-boot{z-index:800;display:none;}
+#ov-boot.visible{display:flex;}
+
+.boot-logo{font-family:'Orbitron',monospace;font-weight:900;
+  font-size:clamp(3rem,13vw,6rem);letter-spacing:.4em;
+  background:linear-gradient(140deg,#fff 0%,#f9a8d4 45%,#ec4899 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 22px rgba(236,72,153,.5));margin-bottom:4px;}
+.boot-eyebrow{font-size:.44rem;letter-spacing:.4em;color:rgba(236,72,153,.28);
+  text-transform:uppercase;margin-bottom:clamp(28px,6vmin,48px);}
+
+.boot-ring-wrap{position:relative;width:clamp(120px,28vmin,165px);
+  height:clamp(120px,28vmin,165px);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:clamp(22px,5vmin,36px);}
+.boot-ring-wrap svg{position:absolute;inset:0;width:100%;height:100%;}
+.rt{fill:none;stroke:rgba(236,72,153,.08);stroke-width:2;}
+.rf{fill:none;stroke:var(--pk);stroke-width:2;stroke-linecap:round;
+  stroke-dasharray:440;stroke-dashoffset:440;
+  transition:stroke-dashoffset .35s ease;
+  filter:drop-shadow(0 0 3px var(--pk));}
+.boot-orb-core{
+  width:clamp(52px,13vmin,76px);height:clamp(52px,13vmin,76px);
+  border-radius:50%;position:relative;z-index:2;
+  background:radial-gradient(circle at 38% 33%,rgba(255,255,255,.9) 0%,#ec4899 28%,rgba(60,0,80,.5) 62%,transparent 82%);
+  box-shadow:0 0 28px rgba(236,72,153,.8),0 0 56px rgba(236,72,153,.3);
+  animation:bOrbPulse 2.5s ease-in-out infinite;}
+@keyframes bOrbPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
+
+.boot-msg{font-size:clamp(.46rem,.58rem,.54rem);letter-spacing:.18em;
+  color:rgba(236,72,153,.45);text-align:center;min-height:18px;margin-bottom:10px;}
+.boot-prog-wrap{width:180px;height:2px;background:rgba(236,72,153,.1);
+  border-radius:1px;overflow:hidden;}
+.boot-prog-bar{height:100%;width:0%;
+  background:linear-gradient(90deg,#be185d,#ec4899,#f9a8d4);
+  border-radius:1px;transition:width .3s ease;
+  box-shadow:0 0 6px var(--pk);}
+
+/* ══════════ HEADER ══════════ */
+#hdr{position:fixed;top:0;left:0;right:0;z-index:60;pointer-events:none;
+  padding:calc(var(--st)+9px) 15px 9px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(to bottom,rgba(10,0,16,.9) 60%,transparent);}
+.hdr-logo{font-family:'Orbitron',monospace;font-weight:900;font-size:1.1rem;
+  letter-spacing:.3em;color:var(--pk);text-shadow:0 0 14px rgba(236,72,153,.45);}
+.hdr-r{display:flex;align-items:center;gap:8px;pointer-events:all;}
+.conn-b{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:18px;
+  background:rgba(236,72,153,.06);border:1px solid rgba(236,72,153,.1);
+  font-size:.4rem;letter-spacing:.18em;color:rgba(236,72,153,.4);}
+.conn-d{width:5px;height:5px;border-radius:50%;background:#f59e0b;
+  box-shadow:0 0 5px #f59e0b;transition:background .4s,box-shadow .4s;}
+.conn-d.ok{background:#10b981;box-shadow:0 0 5px #10b981;}
+.icobtn{width:30px;height:30px;border-radius:50%;
+  background:rgba(236,72,153,.07);border:1px solid rgba(236,72,153,.1);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;touch-action:manipulation;transition:all .2s;
+  color:rgba(236,72,153,.4);font-size:.85rem;}
+.icobtn:hover,.icobtn:active{background:rgba(236,72,153,.16);color:var(--pk);}
+
+/* ══════════ MAIN ══════════ */
+#main{position:relative;z-index:10;width:100%;height:100dvh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:calc(var(--st)+54px) 20px calc(var(--sb)+132px);}
+
+/* ══════════ STAGE + ORB ══════════ */
+#stage{position:relative;width:clamp(210px,52vmin,300px);
+  height:clamp(210px,52vmin,300px);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#wc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+.dr{position:absolute;inset:0;border-radius:50%;pointer-events:none;}
+.dr1{border:1px solid rgba(236,72,153,.1);animation:drR 20s linear infinite;}
+.dr1::before{content:'';position:absolute;width:6px;height:6px;border-radius:50%;
+  background:var(--oc);box-shadow:0 0 8px var(--og);
+  top:-3px;left:50%;transform:translateX(-50%);transition:background .4s,box-shadow .4s;}
+.dr2{inset:16px;border:1px dashed rgba(236,72,153,.06);animation:drR 13s linear infinite reverse;}
+.dr3{inset:30px;border:1px solid rgba(236,72,153,.04);animation:drR 8s linear infinite;}
+@keyframes drR{to{transform:rotate(360deg);}}
+
+#orb{position:relative;z-index:5;
+  width:clamp(88px,22vmin,126px);height:clamp(88px,22vmin,126px);
+  border-radius:50%;cursor:pointer;touch-action:manipulation;}
+#orb-c{width:100%;height:100%;border-radius:50%;
+  background:radial-gradient(circle at 38% 33%,rgba(255,255,255,.92) 0%,var(--oc) 28%,rgba(40,0,60,.55) 65%,transparent 85%);
+  box-shadow:0 0 0 1px rgba(255,255,255,.05),0 0 20px 5px var(--og),
+    0 0 55px 15px color-mix(in srgb,var(--og) 38%,transparent),
+    0 0 100px 28px color-mix(in srgb,var(--og) 16%,transparent);
+  animation:oIdle 3.5s ease-in-out infinite;
+  transition:background .5s,box-shadow .5s;}
+body.s-listen #orb-c{animation:oL .5s ease-in-out infinite alternate;}
+body.s-think  #orb-c{animation:oT 1.2s ease-in-out infinite;}
+body.s-speak  #orb-c{animation:oS .38s ease-in-out infinite alternate;}
+body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
+@keyframes oIdle{0%,100%{transform:scale(1);}50%{transform:scale(1.03);}}
+@keyframes oL{from{transform:scale(.93);}to{transform:scale(1.1);}}
+@keyframes oT{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.09);opacity:1;}}
+@keyframes oS{from{transform:scale(.97);}to{transform:scale(1.1);}}
+@keyframes oE{from{transform:scale(.97);}to{transform:scale(1.05);}}
+
+#slbl{position:absolute;bottom:clamp(-46px,-8vmin,-36px);left:50%;transform:translateX(-50%);
+  font-family:'Orbitron',monospace;font-size:clamp(.37rem,.49rem,.45rem);
+  letter-spacing:.5em;color:var(--oc);white-space:nowrap;
+  opacity:.65;text-shadow:0 0 10px var(--og);transition:color .4s;}
+
+/* Subtitle */
+#sub{margin-top:clamp(42px,8vmin,58px);font-size:clamp(.73rem,.9rem,.82rem);
+  font-weight:300;letter-spacing:.05em;color:rgba(236,72,153,.65);
+  text-align:center;max-width:82vw;min-height:38px;line-height:1.75;
+  transition:opacity .3s;opacity:0;}
+
+/* ══════════ CHAT (últimas mensagens) ══════════ */
+#chatbox{position:fixed;bottom:calc(var(--sb)+126px);left:0;right:0;
+  max-height:22vh;overflow-y:auto;padding:4px 14px;
+  display:flex;flex-direction:column;gap:6px;pointer-events:none;z-index:20;
+  mask-image:linear-gradient(transparent 0%,black 28%,black 100%);
+  -webkit-mask-image:linear-gradient(transparent 0%,black 28%,black 100%);}
+.cm{font-size:clamp(.56rem,.67rem,.62rem);line-height:1.65;
+  max-width:88%;border-radius:10px;padding:6px 10px;}
+.cm-u{align-self:flex-end;background:rgba(56,189,248,.08);
+  border:1px solid rgba(56,189,248,.13);color:rgba(180,220,255,.62);}
+.cm-k{align-self:flex-start;background:rgba(236,72,153,.07);
+  border:1px solid rgba(236,72,153,.13);color:rgba(249,168,212,.7);}
+.cm-lbl{font-size:.3rem;letter-spacing:.22em;opacity:.42;
+  margin-bottom:2px;font-family:'Orbitron',monospace;}
+
+/* Metric float card */
+.mcard{position:fixed;right:14px;top:76px;
+  background:rgba(12,0,20,.97);border-left:3px solid var(--pk);
+  padding:11px 13px;border-radius:8px;z-index:80;
+  box-shadow:0 16px 36px rgba(0,0,0,.6);min-width:110px;
+  animation:mcIn .4s cubic-bezier(.175,.885,.32,1.3) forwards;}
+@keyframes mcIn{from{transform:translateX(120%);opacity:0;}to{transform:none;opacity:1;}}
+.mcard.out{animation:mcOut .5s ease-in forwards;}
+@keyframes mcOut{to{transform:translateX(130%);opacity:0;}}
+.mc-t{font-size:.34rem;letter-spacing:.18em;color:var(--pk);
+  font-family:'Orbitron',monospace;text-transform:uppercase;margin-bottom:3px;}
+.mc-v{font-family:'Orbitron',monospace;font-size:1.05rem;font-weight:700;color:#fff;}
+.mc-l{font-size:.32rem;color:rgba(236,72,153,.38);margin-top:2px;
+  letter-spacing:.1em;text-transform:uppercase;}
+
+/* ══════════ BOTTOM BAR ══════════ */
+#bar{position:fixed;bottom:0;left:0;right:0;z-index:50;
+  padding:9px 14px calc(var(--sb)+9px);
+  background:linear-gradient(to top,rgba(10,0,16,.95) 60%,transparent);
+  display:flex;flex-direction:column;gap:6px;}
+.bar-row1{display:flex;align-items:center;justify-content:space-between;}
+
+/* Mãos livres toggle */
+.hf-w{display:flex;align-items:center;gap:7px;}
+.hf-l{font-size:.38rem;letter-spacing:.16em;color:rgba(236,72,153,.3);text-transform:uppercase;}
+.sw{position:relative;display:inline-block;width:36px;height:19px;}
+.sw input{opacity:0;width:0;height:0;}
+.sw-s{position:absolute;cursor:pointer;inset:0;
+  background:rgba(255,255,255,.05);transition:.3s;border-radius:18px;}
+.sw-s::before{position:absolute;content:"";height:13px;width:13px;
+  left:3px;bottom:3px;background:#fff;transition:.3s;border-radius:50%;}
+.sw input:checked+.sw-s{background:var(--pk);}
+.sw input:checked+.sw-s::before{transform:translateX(17px);}
+
+#dbinfo{font-size:.38rem;letter-spacing:.13em;color:rgba(236,72,153,.25);}
+
+/* Log strip */
+#log{max-height:44px;overflow:hidden;font-size:.4rem;line-height:1.55;
+  color:rgba(180,170,200,.25);letter-spacing:.05em;cursor:pointer;
+  transition:max-height .3s;}
+#log.exp{max-height:78px;}
+.le{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ══════════ SETTINGS PANEL ══════════ */
+#cfg{position:fixed;top:0;right:0;bottom:0;z-index:400;
+  width:min(295px,88vw);
+  background:linear-gradient(170deg,rgba(12,0,20,.99),rgba(8,0,14,.995));
+  border-left:1px solid rgba(236,72,153,.09);
+  transform:translateX(102%);transition:transform .38s cubic-bezier(.34,1.1,.64,1);
+  padding:calc(var(--st)+50px) 15px calc(var(--sb)+15px);
+  overflow-y:auto;display:flex;flex-direction:column;gap:13px;}
+#cfg.open{transform:translateX(0);}
+.cfg-hdr{position:absolute;top:calc(var(--st)+11px);left:15px;right:15px;
+  display:flex;justify-content:space-between;align-items:center;}
+.cfg-ht{font-family:'Orbitron',monospace;font-size:.44rem;letter-spacing:.26em;
+  color:rgba(236,72,153,.35);}
+.cfg-hx{font-size:.95rem;cursor:pointer;color:rgba(236,72,153,.28);
+  padding:4px 7px;transition:color .2s;}
+.cfg-hx:hover{color:#ff1744;}
+.cs{border-bottom:1px solid rgba(236,72,153,.07);padding-bottom:12px;}
+.ct{font-family:'Orbitron',monospace;font-size:.41rem;letter-spacing:.24em;
+  color:rgba(236,72,153,.32);margin-bottom:8px;}
+.cl{font-size:.5rem;letter-spacing:.09em;color:rgba(236,72,153,.4);
+  display:block;margin-bottom:4px;}
+.ci{width:100%;background:rgba(236,72,153,.06);
+  border:1px solid rgba(236,72,153,.12);color:var(--txt);
+  font-family:'Inter',sans-serif;font-size:.56rem;
+  padding:7px 9px;border-radius:5px;outline:none;
+  transition:border .2s;-webkit-appearance:none;appearance:none;}
+.ci:focus{border-color:rgba(236,72,153,.35);}
+.ci option{background:#0a0010;}
+.cb{width:100%;padding:8px;border:1px solid rgba(236,72,153,.18);
+  background:rgba(236,72,153,.06);color:rgba(236,72,153,.6);
+  font-family:'Orbitron',monospace;font-size:.44rem;letter-spacing:.16em;
+  border-radius:5px;cursor:pointer;transition:all .2s;margin-top:6px;
+  touch-action:manipulation;}
+.cb:hover,.cb:active{background:rgba(236,72,153,.15);color:rgba(236,72,153,.92);}
+.cb.red{border-color:rgba(255,23,68,.22);background:rgba(255,23,68,.05);color:rgba(255,80,100,.5);}
+.cb.red:hover{background:rgba(255,23,68,.13);}
+#brain-st{font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;
+  letter-spacing:.07em;white-space:pre-wrap;}
+.cfg-note{font-size:.44rem;color:rgba(236,72,153,.3);line-height:1.8;letter-spacing:.06em;
+  padding:8px 10px;background:rgba(236,72,153,.04);border-radius:5px;
+  border-left:2px solid rgba(236,72,153,.2);}
+.cfg-note a{color:rgba(236,72,153,.55);text-decoration:underline;}
+
+/* desktop cursor */
+@media(hover:hover){body{cursor:none;}}
+#cur{position:fixed;width:18px;height:18px;
+  border:1px solid rgba(236,72,153,.58);border-radius:50%;
+  pointer-events:none;z-index:9999;transform:translate(-50%,-50%);
+  box-shadow:0 0 5px rgba(236,72,153,.32);display:none;}
+@media(hover:hover){#cur{display:block;}}
+</style>
 </head>
-<body class="text-slate-200">
+<body>
 
-    <div id="calibration-overlay" class="fixed inset-0 flex flex-col items-center justify-center p-8 transition-opacity duration-700">
-        <div class="max-w-md w-full text-center space-y-6">
-            <div class="space-y-1">
-                <h2 class="font-orbitron text-3xl tracking-[0.3em] text-pink-500 text-white">KIRA</h2>
-                <p class="text-[10px] tracking-[0.4em] text-slate-500 uppercase">Executive Sênior • v7.5</p>
-            </div>
-            <p id="cal-msg" class="text-xs text-slate-400 italic">Sincronizando tabelas e bloqueando motor vocal nativo...</p>
-            <div class="relative h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div id="calibration-bar" class="absolute top-0 left-0 h-full w-0 bg-pink-500 transition-all duration-300"></div>
-            </div>
-            <button id="btn-init" class="px-12 py-4 bg-pink-500/10 border border-pink-500/30 text-pink-500 font-orbitron text-[10px] tracking-[0.3em] hover:bg-pink-500/20 transition-all rounded-sm uppercase">
-                Iniciar Handshake
-            </button>
-        </div>
+<!-- ════════════════════════════════════════════════
+     PASSO 1 — PERMISSÃO DE MICROFONE
+════════════════════════════════════════════════ -->
+<div class="overlay" id="ov-mic">
+  <div class="mic-icon">🎙️</div>
+  <div class="ov-title" id="mic-title">KIRA — MICROFONE</div>
+  <div class="ov-sub" id="mic-sub">Verificando ambiente…</div>
+  <button class="big-btn" id="btn-mic" onclick="pedirMicrofone()" style="display:none">
+    🎤 &nbsp;PERMITIR MICROFONE
+  </button>
+  <!-- Bloco de instruções de servidor local -->
+  <div id="server-guide" style="display:none;margin-top:4px;max-width:320px;width:100%">
+    <div class="guide-tabs">
+      <button class="gtab active" onclick="showTab('win')">Windows</button>
+      <button class="gtab" onclick="showTab('mac')">Mac/Linux</button>
+      <button class="gtab" onclick="showTab('node')">Node.js</button>
+      <button class="gtab" onclick="showTab('chrome')">Chrome Flag</button>
     </div>
+    <div class="gtab-content" id="tab-win">
+      <div class="code-block" onclick="copyCode(this)">
+        <span class="code-label">Clique para copiar</span>
+        <code>python -m http.server 8000</code>
+      </div>
+      <p class="step-hint">1. Abra o <b>Prompt de Comando</b> na pasta do arquivo<br>
+      2. Execute o comando acima<br>
+      3. Abra: <a href="http://localhost:8000" target="_blank">http://localhost:8000</a></p>
+      <div class="code-block" onclick="copyCode(this)" style="margin-top:8px">
+        <span class="code-label">Não tem Python? Use PowerShell:</span>
+        <code>npx serve .</code>
+      </div>
+    </div>
+    <div class="gtab-content" id="tab-mac" style="display:none">
+      <div class="code-block" onclick="copyCode(this)">
+        <span class="code-label">Clique para copiar</span>
+        <code>python3 -m http.server 8000</code>
+      </div>
+      <p class="step-hint">1. Abra o <b>Terminal</b> na pasta do arquivo<br>
+      2. Execute o comando acima<br>
+      3. Abra: <a href="http://localhost:8000" target="_blank">http://localhost:8000</a></p>
+    </div>
+    <div class="gtab-content" id="tab-node" style="display:none">
+      <div class="code-block" onclick="copyCode(this)">
+        <span class="code-label">Clique para copiar (instala e serve)</span>
+        <code>npx serve . -p 8000</code>
+      </div>
+      <p class="step-hint">Funciona se tiver Node.js instalado.<br>
+      Depois abra: <a href="http://localhost:8000" target="_blank">http://localhost:8000</a></p>
+    </div>
+    <div class="gtab-content" id="tab-chrome" style="display:none">
+      <p class="step-hint" style="margin-bottom:8px"><b>Alternativa: Chrome Flag</b><br>
+      Permite microfone em file:// sem servidor.</p>
+      <div class="code-block" onclick="copyCode(this)">
+        <span class="code-label">Cole na barra do Chrome e pressione Enter:</span>
+        <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>
+      </div>
+      <p class="step-hint">Adicione <code>file://</code> na lista e reinicie o Chrome.</p>
+      <div style="margin-top:8px;padding:8px;background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.15);border-radius:5px;font-size:.44rem;color:rgba(255,200,0,.55);line-height:1.7;letter-spacing:.06em">
+        ⚠ Opção de desenvolvimento apenas — use localhost para produção.
+      </div>
+    </div>
+  </div>
+  <div id="mic-err" style="display:none"></div>
+</div>
 
-    <header class="fixed top-0 w-full p-6 flex justify-between items-center z-50">
-        <div class="flex flex-col">
-            <h1 class="font-orbitron text-2xl font-bold tracking-tighter text-pink-500">KIRA</h1>
-            <span class="text-[8px] tracking-[0.5em] text-slate-500 uppercase">Data Integrated • Executive Intelligence</span>
-        </div>
-        <div class="flex items-center gap-6">
-            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/5">
-                <span class="text-[9px] font-bold tracking-widest text-slate-400 uppercase">Modo Mãos Livres</span>
-                <label class="switch">
-                    <input type="checkbox" id="continuous-toggle">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div id="connection-status" class="status-badge px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-medium tracking-widest">
-                <div id="status-dot" class="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]"></div>
-                <span id="status-text">OFFLINE</span>
-            </div>
-        </div>
-    </header>
+<!-- ════════════════════════════════════════════════
+     PASSO 2 — BOOT / CARREGAMENTO DO FIREBASE
+════════════════════════════════════════════════ -->
+<div class="overlay" id="ov-boot">
+  <div class="boot-logo">KIRA</div>
+  <div class="boot-eyebrow">Executive Intelligence · AgroAnalytics</div>
 
-    <main class="h-screen w-full flex flex-col items-center justify-center relative">
-        <div id="card-container"></div>
-        <div id="orb-container">
-            <div class="orb-glow"></div>
-            <canvas id="visualizer"></canvas>
-            <div class="w-28 h-28 rounded-full border border-pink-500/20 flex items-center justify-center bg-slate-900/40 backdrop-blur-xl relative z-20 shadow-2xl">
-                <div class="absolute w-20 h-20 rounded-full border border-dashed border-pink-400/10 animate-[spin_15s_linear_infinite]"></div>
-                <div id="mic-icon" class="text-pink-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                </div>
-            </div>
-            <div id="subtitle" class="absolute -bottom-28 w-[180%] left-[-40%] text-center opacity-0 transition-all duration-300 translate-y-2">
-                <p class="text-xl font-light text-pink-100 tracking-wide min-h-[1.5em]" id="st-text">...</p>
-            </div>
-        </div>
-    </main>
+  <div class="boot-ring-wrap">
+    <svg viewBox="0 0 140 140">
+      <circle class="rt" cx="70" cy="70" r="68"/>
+      <circle class="rf" id="ring-f" cx="70" cy="70" r="68"/>
+    </svg>
+    <div class="boot-orb-core"></div>
+  </div>
 
-    <footer class="fixed bottom-0 w-full p-8 flex justify-center z-50 pointer-events-none">
-        <div class="w-full max-w-2xl bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-2xl p-4 pointer-events-auto">
-            <div class="flex items-center gap-4 mb-2 border-b border-white/5 pb-1">
-                <span class="text-[9px] font-bold tracking-[0.3em] text-pink-500 uppercase">Kira Neural Core v7.5</span>
-                <div class="flex-1"></div>
-                <div id="mic-meter" class="h-0.5 w-32 bg-slate-800 rounded-full">
-                    <div id="mic-meter-fill" class="h-full w-0 bg-pink-400 transition-all duration-75"></div>
-                </div>
-            </div>
-            <div id="chat-log" class="h-20 overflow-y-auto space-y-1 pr-2 text-[10px] leading-tight font-mono text-slate-400"></div>
-        </div>
-    </footer>
+  <div class="boot-msg" id="boot-msg">Inicializando…</div>
+  <div class="boot-prog-wrap"><div class="boot-prog-bar" id="boot-bar"></div></div>
+</div>
 
-    <script>
-        // BLOQUEIO TOTAL E IRREVERSÍVEL DO MOTOR DE VOZ NATIVO
-        if ('speechSynthesis' in window) {
-            Object.defineProperty(window.speechSynthesis, 'speak', { value: () => { return false; }, writable: false });
-            window.speechSynthesis.cancel();
+<!-- ════════════════════════════════════════════════
+     INTERFACE PRINCIPAL
+════════════════════════════════════════════════ -->
+<div id="cur"></div>
+
+<div id="hdr">
+  <div class="hdr-logo">KIRA</div>
+  <div class="hdr-r">
+    <div class="conn-b">
+      <div class="conn-d" id="conn-d"></div>
+      <span id="conn-t">OFFLINE</span>
+    </div>
+    <div class="icobtn" onclick="openCfg()">⚙</div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="stage">
+    <canvas id="wc"></canvas>
+    <div class="dr dr1"></div>
+    <div class="dr dr2"></div>
+    <div class="dr dr3"></div>
+    <div id="orb" onclick="orbTap()"><div id="orb-c"></div></div>
+    <div id="slbl">AGUARDANDO</div>
+  </div>
+  <div id="sub"></div>
+</div>
+
+<div id="chatbox"></div>
+
+<div id="bar">
+  <div class="bar-row1">
+    <div class="hf-w">
+      <span class="hf-l">Mãos Livres</span>
+      <label class="sw">
+        <input type="checkbox" id="hf-tog" onchange="toggleHF()">
+        <span class="sw-s"></span>
+      </label>
+    </div>
+    <div id="dbinfo">DB: —</div>
+  </div>
+  <div id="log" onclick="this.classList.toggle('exp')"></div>
+</div>
+
+<!-- Settings -->
+<div id="cfg">
+  <div class="cfg-hdr">
+    <span class="cfg-ht">◆ CONFIGURAÇÕES</span>
+    <span class="cfg-hx" onclick="closeCfg()">✕</span>
+  </div>
+
+  <div class="cs">
+    <div class="ct">🎙 VOZ TTS</div>
+    <div class="cfg-note">
+      Para a voz <b>Gemini</b> (alta qualidade, feminina):<br>
+      Obtenha uma API key em <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
+    </div>
+    <label class="cl" style="margin-top:9px">Gemini API Key</label>
+    <input class="ci" id="gem-key" type="password" placeholder="AIza…" oninput="saveSettings()">
+    <label class="cl" style="margin-top:7px">Voz Gemini</label>
+    <select class="ci" id="gem-voice" onchange="saveSettings()">
+      <option value="Kore">Kore — Feminino profundo (padrão)</option>
+      <option value="Aoede">Aoede — Feminino suave</option>
+      <option value="Leda">Leda — Feminino jovem</option>
+      <option value="Sulafat">Sulafat — Feminino caloroso</option>
+      <option value="Charon">Charon — Feminino firme</option>
+      <option value="Zephyr">Zephyr — Feminino neutro</option>
+    </select>
+    <label class="cl" style="margin-top:7px">Voz Browser (fallback)</label>
+    <select class="ci" id="bv-sel" onchange="saveSettings()">
+      <option value="">Auto (melhor pt-BR)</option>
+    </select>
+    <button class="cb" onclick="previewVoz()" style="margin-top:8px">▶ TESTAR VOZ</button>
+  </div>
+
+  <div class="cs">
+    <div class="ct">🧠 KIRA BRAIN</div>
+    <div id="brain-st">Carregando…</div>
+    <button class="cb" onclick="exportBrain()">↓ EXPORTAR BRAIN.JSON</button>
+    <button class="cb red" style="margin-top:5px" onclick="resetBrain()">⚠ RESETAR BRAIN</button>
+  </div>
+
+  <div class="cs">
+    <div class="ct">📊 FIREBASE</div>
+    <div id="cfg-db" style="font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;">Carregando…</div>
+    <button class="cb" style="margin-top:7px" onclick="reloadDB()">↻ RECARREGAR DADOS</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════ */
+const FB_CFG = {
+  apiKey:            'AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc',
+  authDomain:        'agroanalytics-api.firebaseapp.com',
+  projectId:         'agroanalytics-api',
+  storageBucket:     'agroanalytics-api.firebasestorage.app',
+  messagingSenderId: '739888244342',
+  appId:             '1:739888244342:web:558d620583469ec515e157'
+};
+const GROQ    = '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';
+const BKEY    = 'kira_brain_v2';
+const HKEY    = 'kira_hist';
+const SKEY    = 'kira_settings';
+
+/* ═══════════════════════════════════════════════
+   PLATAFORMA
+═══════════════════════════════════════════════ */
+const IS_IOS  = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const IS_MOB  = IS_IOS || /Android/.test(navigator.userAgent) ||
+                (window.innerWidth < 768 && 'ontouchstart' in window);
+
+/* ═══════════════════════════════════════════════
+   ESTADO GLOBAL
+═══════════════════════════════════════════════ */
+let db = null, dbData = {}, dbReady = false;
+let micStream = null, audioCtx = null, analyser = null;
+let recorder = null, recChunks = [], isRec = false;
+let isBusy = false, isHF = false;
+let silTimer = null, silStart = null, recStart = 0;
+let curState = 'idle';
+let chatHist = [];
+let currentAudio = null;
+let silCheckId = null;
+
+/* ═══════════════════════════════════════════════
+   BRAIN — JSON de aprendizado persistente
+═══════════════════════════════════════════════ */
+let brain = loadBrain();
+
+function loadBrain() {
+  try {
+    const raw = localStorage.getItem(BKEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return {
+    v: 2, created: iso(), updated: iso(), interactions: 0,
+    domain: { machines: {}, operators: {}, metrics_history: [] },
+    frequent_queries: [], corrections: [], insights: [], anomalies: [],
+    prefs: { style: 'concise' }
+  };
+}
+
+function iso() { return new Date().toISOString(); }
+
+function saveBrain() {
+  brain.updated = iso();
+  try { localStorage.setItem(BKEY, JSON.stringify(brain)); } catch(e) {}
+  refreshBrainUI();
+}
+
+function learnFromData(data) {
+  const today = iso().split('T')[0];
+  for (const [nome, rows] of Object.entries(data)) {
+    if (!Array.isArray(rows) || !rows.length) continue;
+    const cols = Object.keys(rows[0]).map(c => c.toLowerCase());
+    const codIdx  = cols.findIndex(c => /cod.*equip|colh|maq|harv|equip/i.test(c));
+    const pesoIdx = cols.findIndex(c => /peso|ton|weight/i.test(c));
+    const datIdx  = cols.findIndex(c => /^dat|data|date/i.test(c));
+    const opIdx   = cols.findIndex(c => /oper|motorist|driver/i.test(c));
+    const rCols   = Object.keys(rows[0]);
+
+    if (codIdx >= 0) {
+      const g = {};
+      rows.forEach(r => {
+        const cod = String(r[rCols[codIdx]] || '').trim();
+        if (!cod) return;
+        if (!g[cod]) g[cod] = { tons: 0, dates: new Set() };
+        if (pesoIdx >= 0) {
+          const v = parseFloat(String(r[rCols[pesoIdx]] || '').replace(',', '.'));
+          if (!isNaN(v)) g[cod].tons += v;
         }
-
-        const apiKey = ""; 
-        const groqKey = "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"; 
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc",
-            authDomain: "agroanalytics-api.firebaseapp.com",
-            projectId: "agroanalytics-api",
-            storageBucket: "agroanalytics-api.firebasestorage.app",
-            messagingSenderId: "739888244342",
-            appId: "1:739888244342:web:558d620583469ec515e157",
-            measurementId: "G-6TYZDXMJZ5"
-        };
-
-        let isRecording = false, isThinking = false, isSpeaking = false, isCalibrated = false;
-        let audioContext, analyser, dataArray, source, animationId, mediaRecorder, audioChunks = [];
-        let micStream, db, auth, dbData = {}, currentAudio = null, startTime = 0;
-        let continuousMode = false, silenceThreshold = 10, silenceStartTime = null;
-        
-        let chatHistory = JSON.parse(localStorage.getItem('kira_memory') || '[]');
-
-        const orbContainer = document.getElementById('orb-container');
-        const subtitleText = document.getElementById('st-text');
-        const chatLog = document.getElementById('chat-log');
-        const canvas = document.getElementById('visualizer');
-        const btnInit = document.getElementById('btn-init');
-        const calOverlay = document.getElementById('calibration-overlay');
-        const calBar = document.getElementById('calibration-bar');
-        const calMsg = document.getElementById('cal-msg');
-        const micMeter = document.getElementById('mic-meter-fill');
-        const contToggle = document.getElementById('continuous-toggle');
-        const cardContainer = document.getElementById('card-container');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = 300; canvas.height = 300;
-
-        function addToLog(msg, type = 'system') {
-            const time = new Date().toLocaleTimeString('pt-BR');
-            const p = document.createElement('div');
-            const colors = { user: 'text-sky-400', kira: 'text-pink-400', system: 'text-slate-500', error: 'text-red-400' };
-            p.className = "log-line";
-            p.innerHTML = `<span class="${colors[type]} font-bold text-[8px]">[${time}] ${type.toUpperCase()}:</span> <span>${msg}</span>`;
-            chatLog.appendChild(p);
-            chatLog.scrollTop = chatLog.scrollHeight;
+        if (datIdx >= 0) g[cod].dates.add(String(r[rCols[datIdx]]).split(' ')[0]);
+      });
+      for (const [cod, info] of Object.entries(g)) {
+        if (!brain.domain.machines[cod])
+          brain.domain.machines[cod] = { cod, tmd_hist: [], total_ton: 0, mentions: 0, last_seen: today };
+        const m = brain.domain.machines[cod];
+        m.total_ton = info.tons; m.mentions++; m.last_seen = today;
+        if (info.tons > 0 && info.dates.size > 0) {
+          const tmd = info.tons / info.dates.size;
+          m.tmd_hist = [...m.tmd_hist, { v: +tmd.toFixed(1), d: today }].slice(-30);
+          m.tmd_medio = +(m.tmd_hist.reduce((a, x) => a + x.v, 0) / m.tmd_hist.length).toFixed(1);
         }
+      }
+    }
 
-        async function syncAgroAnalytics() {
-            return new Promise(async (resolve) => {
-                calMsg.innerText = "Conectando ao Firebase Hub...";
-                calBar.style.width = "30%";
-                try {
-                    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-                    db = firebase.firestore();
-                    auth = firebase.auth();
-                    await auth.signInAnonymously();
-                    
-                    calMsg.innerText = "Acessando tabelas mestre...";
-                    calBar.style.width = "60%";
-
-                    const collections = ['snapshots', 'snapshots_bulk'];
-                    let loadedCount = 0;
-
-                    collections.forEach(collection => {
-                        db.collection(collection).onSnapshot(snapshot => {
-                            if (!snapshot.empty) {
-                                snapshot.forEach(doc => { 
-                                    dbData[doc.id] = doc.data(); 
-                                    addToLog(`Data Sync: ${doc.id}`, 'system');
-                                });
-                            }
-                            loadedCount++;
-                            if (loadedCount >= 2) {
-                                calBar.style.width = "100%";
-                                document.getElementById('status-text').innerText = "ONLINE";
-                                document.getElementById('status-dot').className = "w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
-                                resolve(true);
-                            }
-                        }, () => resolve(false));
-                    });
-                } catch (err) { resolve(false); }
-            });
+    if (opIdx >= 0) {
+      rows.forEach(r => {
+        const op = String(r[rCols[opIdx]] || '').trim();
+        if (!op || op.length < 2) return;
+        if (!brain.domain.operators[op])
+          brain.domain.operators[op] = { total_ton: 0, mentions: 0, last_seen: today };
+        brain.domain.operators[op].mentions++;
+        brain.domain.operators[op].last_seen = today;
+        if (pesoIdx >= 0) {
+          const v = parseFloat(String(r[rCols[pesoIdx]] || '').replace(',', '.'));
+          if (!isNaN(v)) brain.domain.operators[op].total_ton += v;
         }
+      });
+    }
+  }
+  genInsights();
+  saveBrain();
+}
 
-        function showCard(title, value, label) {
-            const card = document.createElement('div');
-            card.className = 'data-card';
-            card.innerHTML = `<div class="text-[9px] uppercase tracking-widest text-pink-500 font-bold mb-1">${title}</div><div class="text-xl font-orbitron text-white">${value}</div><div class="text-[9px] text-slate-500 uppercase mt-1">${label}</div>`;
-            cardContainer.appendChild(card);
-            setTimeout(() => { card.classList.add('fade-out'); setTimeout(() => card.remove(), 600); }, 9000);
+function genInsights() {
+  const machs = Object.values(brain.domain.machines).filter(m => m.tmd_medio > 0)
+    .sort((a, b) => (b.tmd_medio || 0) - (a.tmd_medio || 0));
+  if (!machs.length) return;
+  const top = machs[0];
+  const avg = machs.reduce((a, m) => a + (m.tmd_medio || 0), 0) / machs.length;
+  const below = machs.filter(m => m.tmd_medio < avg * 0.8);
+  brain.insights = [];
+  brain.insights.push({ type: 'top_machine', text: `Colhedora ${top.cod} lidera com TMD médio de ${top.tmd_medio} t/dia`, ts: iso(), conf: .92 });
+  if (below.length) brain.insights.push({ type: 'low_perf', text: `${below.length} máquina(s) com TMD abaixo de 80% da média`, ts: iso(), conf: .85 });
+  brain.insights.push({ type: 'fleet_avg', text: `TMD médio da frota: ${avg.toFixed(1)} t/dia (${machs.length} máquinas)`, ts: iso(), conf: .9 });
+}
+
+function learnInteraction(q, a) {
+  brain.interactions++;
+  const key = q.toLowerCase().replace(/\d+/g, '#').trim().slice(0, 80);
+  const ex = brain.frequent_queries.find(x => x.p === key);
+  if (ex) { ex.n++; ex.last = a.slice(0, 100); }
+  else brain.frequent_queries.unshift({ p: key, n: 1, last: a.slice(0, 100), ts: iso() });
+  brain.frequent_queries = brain.frequent_queries.sort((a, b) => b.n - a.n).slice(0, 30);
+  saveBrain();
+}
+
+function refreshBrainUI() {
+  const el = document.getElementById('brain-st');
+  if (!el) return;
+  const mc = Object.keys(brain.domain.machines).length;
+  const oc = Object.keys(brain.domain.operators).length;
+  el.textContent = `Interações: ${brain.interactions}\nMáquinas: ${mc}\nOperadores: ${oc}\nInsights: ${brain.insights.length}\nAtualizado: ${brain.updated?.split('T')[0] || '—'}`;
+}
+
+function resetBrain() {
+  if (!confirm('Resetar o aprendizado do Kira Brain?')) return;
+  localStorage.removeItem(BKEY);
+  brain = loadBrain(); saveBrain();
+  addLog('Brain resetado', 'sys');
+}
+
+function exportBrain() {
+  const blob = new Blob([JSON.stringify(brain, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'kira_brain_' + iso().split('T')[0] + '.json';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ═══════════════════════════════════════════════
+   WAVEFORM
+═══════════════════════════════════════════════ */
+const wC = document.getElementById('wc'), wX = wC.getContext('2d');
+let wW = 0, wH = 0, wcx = 0, wcy = 0, orbR = 0;
+const BARS = 64, PHS = Array.from({ length: 64 }, () => Math.random() * Math.PI * 2);
+let wt = 0;
+const SCOL = { idle: [236,72,153], listen: [56,189,248], think: [167,139,250], speak: [45,212,191], error: [255,23,68] };
+
+function resW() {
+  const s = document.getElementById('stage').getBoundingClientRect();
+  const d = window.devicePixelRatio || 1;
+  wC.width  = s.width  * d; wC.height = s.height * d;
+  wC.style.width  = s.width  + 'px'; wC.style.height = s.height + 'px';
+  wX.setTransform(1, 0, 0, 1, 0, 0); wX.scale(d, d);
+  wW = s.width; wH = s.height; wcx = wW / 2; wcy = wH / 2;
+  orbR = document.getElementById('orb').getBoundingClientRect().width / 2 + 16;
+}
+window.addEventListener('resize', resW);
+
+function drawW() {
+  requestAnimationFrame(drawW);
+  if (!wW) { resW(); return; }
+  wX.clearRect(0, 0, wW, wH); wt += .022;
+  const fft = new Uint8Array(analyser ? analyser.frequencyBinCount : 0);
+  if (analyser) analyser.getByteFrequencyData(fft);
+  const [r, g, b] = SCOL[curState] || SCOL.idle;
+  for (let i = 0; i < BARS; i++) {
+    const ang = (i / BARS) * Math.PI * 2 - Math.PI / 2;
+    let amp = 0;
+    switch (curState) {
+      case 'listen': if (analyser) { const idx = Math.floor((i / BARS) * fft.length * .65); amp = (fft[idx] / 255) * 50; } break;
+      case 'speak':  amp = 5 + Math.abs(Math.sin(wt*2.5+PHS[i]+i*.2))*28 + Math.abs(Math.sin(wt*5+i*.45))*13; break;
+      case 'think':  amp = 3 + Math.abs(Math.sin(wt*1.5+PHS[i]+i*.15))*18 + Math.abs(Math.sin(wt*3.5+i*.3))*7; break;
+      default:       amp = 1.5 + Math.abs(Math.sin(wt*.6+PHS[i]+i*.05))*4;
+    }
+    const ir = orbR + 3, or2 = orbR + 3 + Math.max(1.5, amp);
+    wX.strokeStyle = `rgba(${r},${g},${b},${curState==='idle'?.22:.58})`;
+    wX.lineWidth = curState === 'idle' ? 1 : 1.6; wX.lineCap = 'round';
+    wX.beginPath();
+    wX.moveTo(wcx + Math.cos(ang)*ir,  wcy + Math.sin(ang)*ir);
+    wX.lineTo(wcx + Math.cos(ang)*or2, wcy + Math.sin(ang)*or2);
+    wX.stroke();
+  }
+  const g2 = wX.createRadialGradient(wcx, wcy, orbR-8, wcx, wcy, orbR+9);
+  g2.addColorStop(0, `rgba(${r},${g},${b},.12)`); g2.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  wX.fillStyle = g2; wX.beginPath(); wX.arc(wcx, wcy, orbR+9, 0, Math.PI*2); wX.fill();
+}
+requestAnimationFrame(drawW);
+
+/* ═══════════════════════════════════════════════
+   ESTADO VISUAL
+═══════════════════════════════════════════════ */
+const SLBL = { idle:'AGUARDANDO', listen:'OUVINDO', think:'PROCESSANDO', speak:'FALANDO', error:'ERRO' };
+function setState(s) {
+  curState = s;
+  const cls = { idle:'', listen:'s-listen', think:'s-think', speak:'s-speak', error:'s-error' };
+  document.body.className = cls[s] || '';
+  document.getElementById('slbl').textContent = SLBL[s] || 'AGUARDANDO';
+}
+
+function setSub(t, keep = false) {
+  const el = document.getElementById('sub');
+  if (!t) { el.style.opacity = '0'; return; }
+  el.textContent = t; el.style.opacity = '1';
+  clearTimeout(el._t);
+  if (!keep) el._t = setTimeout(() => { el.style.opacity = '0'; }, 8000);
+}
+
+/* ═══════════════════════════════════════════════
+   PASSO 1 — PERMISSÃO DO MICROFONE
+   Exibido ao abrir a página, antes de qualquer coisa
+═══════════════════════════════════════════════ */
+async function pedirMicrofone() {
+  const btn  = document.getElementById('btn-mic');
+  const errEl = document.getElementById('mic-err');
+  errEl.style.display = 'none';
+  btn.textContent = '⏳  Aguardando permissão…';
+  btn.style.opacity = '.6';
+  btn.style.pointerEvents = 'none';
+
+  try {
+    /* getUserMedia com gesto do usuário — único jeito de funcionar */
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+    /* Liga Web Audio para waveform */
+    try {
+      audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+      analyser  = audioCtx.createAnalyser();
+      analyser.fftSize = 256; analyser.smoothingTimeConstant = .76;
+      audioCtx.createMediaStreamSource(micStream).connect(analyser);
+    } catch(e) { console.warn('[K] WebAudio:', e); }
+
+    /* Vai para passo 2: boot + Firebase */
+    fecharOverlay('ov-mic');
+    abrirOverlay('ov-boot');
+    setTimeout(resW, 200);
+    await initFirebase();
+
+  } catch (err) {
+    console.error('[K] mic error:', err.name, err.message);
+    btn.textContent = '🎤  TENTAR NOVAMENTE';
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'all';
+
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      errEl.innerHTML =
+        '❌ Microfone bloqueado.<br>' +
+        '• Clique no ícone 🔒 ou 🎤 na barra do browser<br>' +
+        '• Selecione <b>Permitir microfone</b><br>' +
+        '• Recarregue a página (F5)<br><br>' +
+        '<b>Ou abra no Chrome:</b> Menu → Configurações → Privacidade<br>' +
+        '→ Microfone → Permitir este site';
+    } else if (err.name === 'NotFoundError') {
+      errEl.innerHTML = '❌ Nenhum microfone encontrado no dispositivo.';
+    } else {
+      errEl.innerHTML = '❌ Erro: ' + err.message;
+    }
+    errEl.style.display = 'block';
+  }
+}
+
+function fecharOverlay(id) {
+  const el = document.getElementById(id);
+  el.classList.add('out');
+  setTimeout(() => el.classList.add('gone'), 600);
+}
+function abrirOverlay(id) {
+  document.getElementById(id).classList.add('visible');
+}
+
+/* ═══════════════════════════════════════════════
+   FIREBASE — inicialização com poll robusto
+   Scripts carregam como tags estáticas no <head>
+   O poll aguarda até firebase.initializeApp estar disponível
+═══════════════════════════════════════════════ */
+function setBootProgress(msg, pct) {
+  const m  = document.getElementById('boot-msg');
+  const b  = document.getElementById('boot-bar');
+  const rf = document.getElementById('ring-f');
+  if (m)  m.textContent = msg;
+  if (b)  b.style.width = pct + '%';
+  /* SVG ring: 440 = circumference */
+  if (rf) rf.style.strokeDashoffset = (440 * (1 - pct / 100)).toFixed(1);
+}
+
+function initFirebase() {
+  return new Promise(resolve => {
+    setBootProgress('Aguardando Firebase SDK…', 8);
+
+    /* Poll: tenta até 20s (100 × 200ms) */
+    let attempts = 100;
+    function poll() {
+      if (typeof firebase !== 'undefined' && typeof firebase.initializeApp === 'function') {
+        doInit();
+      } else if (attempts-- > 0) {
+        setTimeout(poll, 200);
+      } else {
+        console.error('[K] Firebase SDK não carregou (CDN bloqueado?)');
+        setBootProgress('Firebase indisponível — modo sem dados', 100);
+        setTimeout(() => { dbReady = true; finishBoot(); resolve(); }, 1000);
+      }
+    }
+
+    function doInit() {
+      try {
+        if (!firebase.apps || firebase.apps.length === 0) firebase.initializeApp(FB_CFG);
+        db = firebase.firestore();
+        setBootProgress('Firebase OK. Autenticando…', 18);
+        document.getElementById('conn-d').classList.add('ok');
+        document.getElementById('conn-t').textContent = 'ONLINE';
+
+        firebase.auth().signInAnonymously()
+          .then(() => {
+            setBootProgress('Autenticado. Carregando tabelas…', 28);
+            loadAllData(resolve);
+          })
+          .catch(e => {
+            console.warn('[K] auth:', e.code);
+            setBootProgress('Carregando sem autenticação…', 28);
+            loadAllData(resolve);
+          });
+      } catch (e) {
+        console.error('[K] doInit:', e.message);
+        setBootProgress('Erro Firebase — offline', 100);
+        setTimeout(() => { dbReady = true; finishBoot(); resolve(); }, 1000);
+      }
+    }
+
+    poll();
+
+    /* Hard timeout 25s */
+    setTimeout(() => {
+      if (!dbReady) {
+        setBootProgress('Timeout — continuando', 100);
+        dbReady = true; finishBoot(); resolve();
+      }
+    }, 25000);
+  });
+}
+
+function parseFBDoc(doc) {
+  try {
+    if (!doc.exists) return [];
+    const d = doc.data();
+    if (d.payload) {
+      const { cab, rows } = JSON.parse(d.payload);
+      return rows.map(r => Object.fromEntries(cab.map((c, i) => [c, r[i] ?? ''])));
+    }
+    if (d.rows && d.columns) return d.rows.map(r => Object.fromEntries(d.columns.map((c, i) => [c, r[i] ?? ''])));
+    if (Array.isArray(d.data)) return d.data;
+    return [d];
+  } catch(e) { return []; }
+}
+
+function loadAllData(onDone) {
+  if (!db) { finishBoot(); if (onDone) onDone(); return; }
+  let done = 0, total = 1;
+
+  function tick(name, count) {
+    done++;
+    const pct = 28 + Math.min(58, Math.floor((done / Math.max(total, 1)) * 58));
+    setBootProgress('Tabela ' + name + ' (' + count + ' reg)…', pct);
+    updateDBCount();
+  }
+
+  /* Toda a coleção snapshots de uma vez */
+  db.collection('snapshots').onSnapshot(
+    snap => {
+      total = Math.max(total, snap.size);
+      snap.forEach(doc => {
+        const rows = parseFBDoc(doc);
+        if (rows.length > 0) { dbData[doc.id] = rows; tick(doc.id, rows.length); addLog('snapshots/' + doc.id + ': ' + rows.length + ' reg', 'sys'); }
+      });
+      if (!dbReady) checkFinish();
+    },
+    err => {
+      console.warn('[K] snapshots listener:', err.code);
+      /* Fallback: tenta docs nomeados individualmente */
+      const NAMES = ['producao','acmSafra','metas','colheita','patio','pesagem',
+                     'transporte','frentes','operadores','equipamentos','diario','turno'];
+      total = NAMES.length;
+      NAMES.forEach(n => {
+        db.collection('snapshots').doc(n).onSnapshot(
+          doc => { if (doc.exists) { dbData[n] = parseFBDoc(doc); tick(n, dbData[n].length); } else { done++; } checkFinish(); },
+          () => { done++; checkFinish(); }
+        );
+      });
+    }
+  );
+
+  /* Coleções raiz em paralelo */
+  const ROOT = ['viagens','producao','colheita','patio','pesagens','frentes',
+                'equipamentos','operadores','metas','turnos','diario','controle','acmSafra'];
+  ROOT.forEach(col => {
+    db.collection(col).limit(800).onSnapshot(
+      s => {
+        if (!s.empty) {
+          dbData['_'+col] = s.docs.map(d => ({ _id: d.id, ...d.data() }));
+          updateDBCount();
         }
+      }, () => {}
+    );
+  });
 
-        function parseCards(text) {
-            const regex = /\{\{CARD:(.*?)\|(.*?)\|(.*?)\}\}/g;
-            let match;
-            while ((match = regex.exec(text)) !== null) showCard(match[1], match[2], match[3]);
-            return text.replace(regex, '').trim();
+  function checkFinish() {
+    if (done >= total && !dbReady) finishLoad();
+  }
+
+  /* Garante finalização em 12s mesmo se nem todos os listeners responderem */
+  setTimeout(() => { if (!dbReady) finishLoad(); }, 12000);
+
+  function finishLoad() {
+    const tot = Object.values(dbData).flat().length;
+    setBootProgress('✓ ' + tot.toLocaleString('pt-BR') + ' reg. Aprendendo…', 92);
+    learnFromData(dbData);
+    updateDBCount();
+    setTimeout(() => { finishBoot(); if (onDone) onDone(); }, 600);
+  }
+}
+
+function finishBoot() {
+  if (dbReady) return;
+  dbReady = true;
+  setBootProgress('Kira pronta.', 100);
+  setTimeout(async () => {
+    /* Fecha boot */
+    fecharOverlay('ov-boot');
+    await waitVoices();
+    /* Saudação */
+    const h = new Date().getHours();
+    const sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const tot  = Object.values(dbData).flat().length;
+    const mc   = Object.keys(brain.domain.machines).length;
+    const greet = `${sd}. Kira online. ${tot > 0 ? 'Analisei ' + tot.toLocaleString('pt-BR') + ' registros e aprendi ' + mc + ' máquinas.' : 'Sem dados Firebase no momento.'} Pode falar.`;
+    setState('speak'); setSub(greet, true);
+    addChat('kira', greet);
+    await speak(greet);
+    setState('idle'); setSub('');
+    if (isHF) startRec();
+  }, 700);
+}
+
+function updateDBCount() {
+  const tot = Object.values(dbData).flat().length;
+  const el = document.getElementById('dbinfo');
+  if (el) el.textContent = 'DB: ' + tot.toLocaleString('pt-BR') + ' reg';
+  refreshCfgDB();
+}
+
+function refreshCfgDB() {
+  const el = document.getElementById('cfg-db');
+  if (!el) return;
+  const lines = Object.entries(dbData)
+    .filter(([, v]) => Array.isArray(v) && v.length > 0)
+    .map(([k, v]) => k.replace(/^_/, '') + ': ' + v.length.toLocaleString('pt-BR') + ' reg')
+    .join('\n');
+  el.textContent = lines || 'Sem dados';
+}
+
+function reloadDB() { dbData = {}; if (db) loadAllData(null); }
+
+/* ═══════════════════════════════════════════════
+   GRAVAÇÃO — MediaRecorder + Whisper
+═══════════════════════════════════════════════ */
+const SILENCE_MS = 900, SILENCE_DB = -44;
+
+function getSupportedMime() {
+  const mimes = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  return mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+}
+
+function startRec() {
+  if (isBusy || isRec || !micStream) return;
+  if (audioCtx?.state === 'suspended') audioCtx.resume();
+  recChunks = []; isRec = true; recStart = Date.now();
+  silStart = null; clearTimeout(silTimer);
+
+  recorder = new MediaRecorder(micStream, { mimeType: getSupportedMime() });
+  recorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
+  recorder.start(100);
+  setState('listen');
+  addLog('Gravando…', 'sys');
+
+  /* Silêncio automático */
+  if (isHF) {
+    clearInterval(silCheckId);
+    silCheckId = setInterval(() => {
+      if (!isRec || !analyser) return;
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(buf);
+      const avg = buf.reduce((a, v) => a + v, 0) / buf.length;
+      const db  = 20 * Math.log10(avg / 255 + 1e-6);
+      if (db < SILENCE_DB) {
+        if (!silStart) silStart = Date.now();
+        if (Date.now() - silStart > SILENCE_MS) {
+          clearInterval(silCheckId);
+          if (Date.now() - recStart > 400) stopRec();
+          else { isRec = false; try { recorder.stop(); } catch(e) {} if (!isBusy) setTimeout(startRec, 500); }
         }
+      } else { silStart = null; }
+    }, 80);
+  }
+}
 
-        btnInit.onclick = async () => {
-            btnInit.style.display = 'none';
-            try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 128;
-                dataArray = new Uint8Array(analyser.frequencyBinCount);
-                source = audioContext.createMediaStreamSource(micStream);
-                source.connect(analyser);
+function stopRec() {
+  if (!isRec) return;
+  isRec = false; clearTimeout(silTimer); clearInterval(silCheckId);
+  if (recorder && recorder.state === 'recording') {
+    recorder.onstop = processAudio;
+    recorder.stop();
+  }
+}
 
-                const ready = await syncAgroAnalytics();
-                if (ready) {
-                    calOverlay.classList.add('opacity-0');
-                    setTimeout(() => calOverlay.style.display = 'none', 500);
-                    isCalibrated = true; drawVisualizer();
-                    await speakNeural("Kira operacional, Senhor. Sistemas de dados sincronizados.");
-                }
-            } catch (err) { btnInit.style.display = 'block'; }
-        };
+async function processAudio() {
+  if (isBusy) return;
+  const blob = new Blob(recChunks, { type: getSupportedMime() || 'audio/webm' });
+  if (blob.size < 800 || Date.now() - recStart < 300) {
+    if (isHF && !isBusy) setTimeout(startRec, 600);
+    return;
+  }
 
-        function drawVisualizer() {
-            animationId = requestAnimationFrame(drawVisualizer);
-            if (!analyser) return;
-            analyser.getByteFrequencyData(dataArray);
+  isBusy = true;
+  setState('think'); setSub('…');
 
-            let sum = 0;
-            for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
-            const avg = sum / dataArray.length;
-            micMeter.style.width = Math.min(100, (avg * 4)) + '%';
+  /* Desativa mic enquanto pensa/fala */
+  micStream?.getAudioTracks().forEach(t => { t.enabled = false; });
 
-            if (isRecording && continuousMode) {
-                if (avg < silenceThreshold) {
-                    if (!silenceStartTime) silenceStartTime = Date.now();
-                    if (Date.now() - silenceStartTime > 800) handleEnd();
-                } else { silenceStartTime = null; }
-            }
+  try {
+    /* Transcrição Whisper */
+    const form = new FormData();
+    form.append('file', blob, 'audio.webm');
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('language', 'pt');
+    form.append('response_format', 'json');
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const center = canvas.width / 2, radius = isRecording ? 72 : 64, bars = 50;
-            for (let i = 0; i < bars; i++) {
-                const barHeight = (isRecording || isThinking || isSpeaking) ? (dataArray[i] / 2.5) : (avg / 15 + 1.5);
-                const rads = (Math.PI * 2) / bars, x = center + Math.cos(rads * i) * radius, y = center + Math.sin(rads * i) * radius;
-                const x_end = center + Math.cos(rads * i) * (radius + barHeight), y_end = center + Math.sin(rads * i) * (radius + barHeight);
-                
-                let hue = 200; 
-                if (isThinking) hue = 320; 
-                if (isSpeaking) hue = 160; 
-                
-                ctx.strokeStyle = `hsla(${hue}, 80%, 60%, ${0.3 + barHeight / 70})`;
-                ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x_end, y_end); ctx.stroke();
-            }
-        }
+    const wRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + GROQ },
+      body: form
+    });
+    if (!wRes.ok) throw new Error('Whisper ' + wRes.status);
+    const texto = ((await wRes.json()).text || '').trim();
+    if (!texto || texto.length < 2) { resetBusy(); return; }
 
-        const handleStart = async (e) => {
-            if (e && e.cancelable) e.preventDefault();
-            if (!isCalibrated || isThinking || isRecording || isSpeaking) return;
-            
-            micStream.getAudioTracks()[0].enabled = true;
-            if (audioContext.state === 'suspended') await audioContext.resume();
-            
-            startTime = Date.now(); silenceStartTime = null; audioChunks = [];
-            mediaRecorder = new MediaRecorder(micStream);
-            mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-            mediaRecorder.start(); isRecording = true;
-            document.getElementById('orb-container').classList.add('listening');
-            document.getElementById('subtitle').classList.remove('opacity-0');
-            subtitleText.innerText = "ESCUTANDO...";
-        };
+    addLog(texto, 'user'); addChat('user', texto);
+    setSub('"' + texto + '"');
 
-        const handleEnd = async () => {
-            if (!isRecording) return;
-            isRecording = false;
-            document.getElementById('orb-container').classList.remove('listening');
-            
-            mediaRecorder.onstop = async () => {
-                micStream.getAudioTracks()[0].enabled = false;
-                const blob = new Blob(audioChunks, { type: 'audio/wav' });
-                if (Date.now() - startTime < 150 || blob.size < 400) { 
-                    resetState(); 
-                    if (continuousMode && !isSpeaking) setTimeout(handleStart, 600); 
-                    return; 
-                }
-                processBrain(blob);
-            };
-            mediaRecorder.stop();
-        };
+    /* LLM */
+    const resp = await askGroq(texto);
+    const clean = parseCards(resp);
 
-        orbContainer.addEventListener('mousedown', handleStart);
-        window.addEventListener('mouseup', handleEnd);
-        contToggle.onchange = (e) => { continuousMode = e.target.checked; if (continuousMode && !isRecording && !isThinking && !isSpeaking) handleStart(); };
+    addLog(clean, 'kira'); addChat('kira', clean);
+    learnInteraction(texto, clean);
 
-        function getNeuralSummary(text) {
-            const q = text.toLowerCase();
-            const summary = {};
-            const keywords = {
-                'acmSafra': ['safra', 'acumulado', 'total'],
-                'producao': ['produção', 'hoje', 'toneladas', 'moagem'],
-                'metas': ['meta', 'objetivo'],
-                'potencial': ['potencial', 'capacidade']
-            };
-            for (const table in keywords) {
-                if (keywords[table].some(k => q.includes(k)) && dbData[table]) {
-                    summary[table] = Array.isArray(dbData[table]) ? dbData[table].slice(0, 3) : dbData[table];
-                }
-            }
-            // Injetar status de carregamento no resumo para o prompt
-            summary['system_status'] = Object.keys(dbData).length > 0 ? "DATABASE_ACTIVE" : "DATABASE_EMPTY";
-            return JSON.stringify(summary);
-        }
+    /* Fala */
+    setState('speak'); setSub(clean, true);
+    await speak(clean);
+    setState('idle'); setSub('');
 
-        async function processBrain(blob) {
-            if (isThinking || isSpeaking) return;
-            isThinking = true;
-            const bStart = Date.now();
-            document.getElementById('orb-container').classList.add('thinking');
-            subtitleText.innerText = "PROCESSANDO...";
+  } catch(err) {
+    console.error('[K]', err);
+    addLog('Erro: ' + err.message, 'err');
+    setState('idle');
+  }
 
-            try {
-                const formData = new FormData();
-                formData.append('file', blob, 'audio.wav');
-                formData.append('model', 'whisper-large-v3-turbo');
-                
-                const wRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${groqKey}` },
-                    body: formData
-                });
-                const text = (await wRes.json()).text;
-                if (!text || text.split(' ').length < 2) throw new Error("Noise");
-                
-                addToLog(text, 'user');
-                const summaryContext = getNeuralSummary(text);
-                const historyCtx = chatHistory.map(h => `${h.role === 'user' ? 'Senhor' : 'Kira'}: ${h.content}`).join('\n');
+  resetBusy();
+}
 
-                const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: `
-                        NOME: Kira. IDENTIDADE: Secretária Executiva Sênior. 
-                        SITUAÇÃO DO BANCO: ${Object.keys(dbData).length > 0 ? 'CONECTADO E ATUALIZADO' : 'DESCONECTADO'}.
-                        DADOS REAIS: ${summaryContext}. 
-                        HISTÓRICO: ${historyCtx}.
-                        COMANDO: ${text}. 
-                        
-                        DIRETRIZES:
-                        1. Responda de forma SÉRIA, RÍGIDA e FORMAL.
-                        2. Se o Senhor perguntar se você está atualizada ou buscou os dados, e a SITUAÇÃO DO BANCO for 'CONECTADO', responda AFIRMATIVAMENTE com os números reais.
-                        3. Máximo 15 palavras.
-                        4. Use {{CARD:T|V|U}} apenas para métricas solicitadas.
-                        5. Única voz permitida: Kore. NUNCA mencione que é uma IA.
-                        6. Trate como Senhor.` }] }] })
-                });
-                
-                const replyRaw = (await gRes.json()).candidates[0].content.parts[0].text;
-                const cleanReply = parseCards(replyRaw);
-                
-                chatHistory.push({ role: 'user', content: text }, { role: 'kira', content: cleanReply });
-                if (chatHistory.length > 15) chatHistory = chatHistory.slice(-15);
-                localStorage.setItem('kira_memory', JSON.stringify(chatHistory));
+function resetBusy() {
+  isBusy = false;
+  micStream?.getAudioTracks().forEach(t => { t.enabled = true; });
+  if (isHF) setTimeout(startRec, 700);
+}
 
-                await speakNeural(cleanReply, Date.now() - bStart);
-            } catch (err) { resetState(); if (continuousMode) setTimeout(handleStart, 800); }
-        }
+/* ═══════════════════════════════════════════════
+   GROQ LLM — contexto rico
+═══════════════════════════════════════════════ */
+async function askGroq(query) {
+  const ctx = buildCtx(query);
+  const insightsText = brain.insights.slice(0, 4).map(i => '• ' + i.text).join('\n');
+  const topMachs = Object.values(brain.domain.machines)
+    .sort((a, b) => (b.tmd_medio || 0) - (a.tmd_medio || 0))
+    .slice(0, 5)
+    .map(m => `${m.cod}: TMD=${m.tmd_medio||'?'} t/dia, Total=${(m.total_ton||0).toFixed(0)} t`)
+    .join('\n');
 
-        async function speakNeural(text, lat) {
-            if (isSpeaking) return;
-            isSpeaking = true; isThinking = false;
-            document.getElementById('orb-container').classList.remove('thinking');
-            document.getElementById('orb-container').classList.add('speaking');
-            addToLog(text, 'kira');
-            subtitleText.innerText = text;
+  const sys = `Você é Kira, assistente de análise agrícola da AgroAnalytics, Usina Pitangueiras.
 
-            try {
-                const ttsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: text }] }],
-                        generationConfig: {
-                            responseModalities: ["AUDIO"],
-                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } }
-                        }
-                    })
-                });
-                const ttsData = await ttsRes.json();
-                const pcm = ttsData.candidates[0].content.parts[0].inlineData.data;
-                const mime = ttsData.candidates[0].content.parts[0].inlineData.mimeType;
-                const wav = pcmToWav(pcm, parseInt(mime.split('rate=')[1]) || 24000);
-                
-                // Sistema de canal único de áudio
-                if(currentAudio) { currentAudio.pause(); currentAudio = null; }
-                const audio = new Audio(URL.createObjectURL(new Blob([wav], { type: 'audio/wav' })));
-                currentAudio = audio;
-                
-                addToLog(`Ciclo Neural: ${lat}ms`, 'system');
+COMO FALAR:
+- Direta, precisa, como colega de confiança
+- Respostas curtas para perguntas simples (máx 15 palavras em voz)
+- Análises detalhadas quando pedir
+- Sem "Com certeza!", "Absolutamente!" — vai direto
+- Para voz: sem markdown, sem asteriscos, linguagem oral natural
+- Use {{CARD:TÍTULO|VALOR|UNIDADE}} para métricas importantes
 
-                if (audioContext.state === 'suspended') await audioContext.resume();
-                await audio.play();
-                audio.onended = () => { 
-                    currentAudio = null; isSpeaking = false;
-                    resetState(); 
-                    if (continuousMode) setTimeout(handleStart, 400); 
-                };
-            } catch (err) { 
-                isSpeaking = false; resetState(); 
-                if (continuousMode) setTimeout(handleStart, 800); 
-            }
-        }
+DOMÍNIO AGRÍCOLA:
+- TMD = Toneladas por Máquina por Dia = total_ton ÷ dias_únicos
+- TMS = Toneladas Métricas de Sacarose
+- TCH = Toneladas de Cana por Hectare
+- ATR = Açúcar Total Recuperável
+- Disponibilidade mecânica = % do tempo operando
 
-        function resetState() {
-            isThinking = false; isRecording = false;
-            document.getElementById('orb-container').classList.remove('thinking', 'listening', 'speaking');
-            setTimeout(() => { if(!isThinking && !isRecording && !isSpeaking) document.getElementById('subtitle').classList.add('opacity-0'); }, 3000);
-        }
+KIRA BRAIN (aprendizado acumulado):
+Insights: ${insightsText || 'ainda aprendendo'}
+Top máquinas:
+${topMachs || 'sem dados suficientes'}
 
-        function pcmToWav(base64, rate) {
-            const buffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
-            const header = new ArrayBuffer(44), view = new DataView(header);
-            view.setUint32(0, 0x52494646, false); view.setUint32(4, 36 + buffer.byteLength, true);
-            view.setUint32(8, 0x57415645, false); view.setUint32(12, 0x666d7420, false);
-            view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-            view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
-            view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-            view.setUint32(36, 0x64617461, false); view.setUint32(40, buffer.byteLength, true);
-            const combined = new Uint8Array(header.byteLength + buffer.byteLength);
-            combined.set(new Uint8Array(header), 0); combined.set(new Uint8Array(buffer), header.byteLength);
-            return combined.buffer;
-        }
+DADOS FIREBASE (${Object.keys(dbData).length} tabelas):
+${ctx}
 
-        window.onload = () => { console.log("KIRA v7.5 Single-Voice Handshake complete."); };
-    </script>
+HORA: ${new Date().toLocaleString('pt-BR')}
+
+REGRAS:
+- Use os dados reais acima para calcular e responder
+- Para "qual máquina mais produziu": some toneladas por código de equipamento
+- Para TMD: divida toneladas pelos dias únicos de operação
+- Nunca invente números`;
+
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + GROQ, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'system', content: sys }, ...chatHist.slice(-8), { role: 'user', content: query }],
+      max_tokens: 500, temperature: .72
+    })
+  });
+  if (!r.ok) throw new Error('Groq ' + r.status);
+  const ans = (await r.json()).choices[0].message.content;
+  chatHist.push({ role: 'user', content: query }, { role: 'assistant', content: ans });
+  if (chatHist.length > 20) chatHist = chatHist.slice(-20);
+  try { localStorage.setItem(HKEY, JSON.stringify(chatHist)); } catch(e) {}
+  return ans;
+}
+
+function buildCtx(query) {
+  const ql = query.toLowerCase();
+  const priority = [];
+  if (/colh|harv|maq|equip|tmd/i.test(ql)) priority.push('producao','colheita','_producao','_colheita');
+  if (/safra|acm|acumul/i.test(ql)) priority.push('acmSafra');
+  if (/meta|objetivo/i.test(ql)) priority.push('metas');
+  if (/pati|recep/i.test(ql)) priority.push('patio','_patio');
+  if (/oper|motorist/i.test(ql)) priority.push('operadores','_operadores');
+
+  const ctx = {};
+  const added = new Set();
+  for (const k of priority) {
+    if (dbData[k]?.length) { ctx[k] = { total: dbData[k].length, dados: dbData[k].slice(0, 300) }; added.add(k); }
+  }
+  for (const [k, v] of Object.entries(dbData)) {
+    if (added.has(k) || !Array.isArray(v) || !v.length) continue;
+    ctx[k] = { total: v.length, amostra: v.slice(0, 30), colunas: Object.keys(v[0] || {}) };
+  }
+  return JSON.stringify(ctx);
+}
+
+/* ═══════════════════════════════════════════════
+   TTS — Gemini (primary) + Browser (fallback)
+═══════════════════════════════════════════════ */
+function waitVoices() {
+  return new Promise(res => {
+    if (!window.speechSynthesis) { res(); return; }
+    if (window.speechSynthesis.getVoices().length > 0) { res(); return; }
+    let done = false;
+    const fin = () => { if (!done) { done = true; res(); } };
+    window.speechSynthesis.onvoiceschanged = fin;
+    setTimeout(fin, 2500);
+  });
+}
+
+async function speak(text) {
+  const clean = text.replace(/\{\{CARD:[^}]+\}\}/g, '').replace(/[*#_◆▶⬡\[\]]/g, '').trim();
+  if (!clean) return;
+  const gKey = localStorage.getItem('kira_gem') || '';
+  if (gKey) { const ok = await speakGemini(clean, gKey); if (ok) return; }
+  await speakBrowser(clean);
+}
+
+async function speakGemini(text, key) {
+  const voice = localStorage.getItem('kira_gem_voice') || 'Kore';
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text }] }],
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } }
+      })
+    });
+    if (!r.ok) return false;
+    const data = await r.json();
+    const part = data?.candidates?.[0]?.content?.parts?.[0];
+    if (!part?.inlineData?.data) return false;
+    const wav = pcmToWav(part.inlineData.data, parseInt(part.inlineData.mimeType?.split('rate=')[1]) || 24000);
+    return playBuf(wav);
+  } catch(e) { return false; }
+}
+
+function pcmToWav(b64, rate) {
+  const buf = Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
+  const hdr = new ArrayBuffer(44), v = new DataView(hdr);
+  v.setUint32(0,0x52494646,false);v.setUint32(4,36+buf.byteLength,true);
+  v.setUint32(8,0x57415645,false);v.setUint32(12,0x666d7420,false);
+  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);
+  v.setUint16(32,2,true);v.setUint16(34,16,true);
+  v.setUint32(36,0x64617461,false);v.setUint32(40,buf.byteLength,true);
+  const out = new Uint8Array(hdr.byteLength + buf.byteLength);
+  out.set(new Uint8Array(hdr), 0); out.set(new Uint8Array(buf), hdr.byteLength);
+  return out.buffer;
+}
+
+function playBuf(buf) {
+  return new Promise(res => {
+    if (currentAudio) { try { currentAudio.pause(); } catch(e) {} currentAudio = null; }
+    const url = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    const a = new Audio(url); currentAudio = a;
+    const end = ok => { URL.revokeObjectURL(url); currentAudio = null; res(ok); };
+    a.onended = () => end(true); a.onerror = () => end(false);
+    a.play().catch(() => end(false));
+    setTimeout(() => { try { a.pause(); } catch(e) {} end(true); }, 45000);
+  });
+}
+
+function speakBrowser(text) {
+  return new Promise(res => {
+    if (!window.speechSynthesis) { res(); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.substring(0, 600));
+    u.lang = 'pt-BR'; u.rate = 1.05; u.pitch = 1.05; u.volume = 1;
+    const pref = localStorage.getItem('kira_bv') || '';
+    const vs = window.speechSynthesis.getVoices();
+    const v = (pref && vs.find(x => x.name === pref))
+           || vs.find(x => x.lang === 'pt-BR' && /Google/i.test(x.name))
+           || vs.find(x => x.lang === 'pt-BR')
+           || vs.find(x => x.lang.startsWith('pt'))
+           || null;
+    if (v) u.voice = v;
+    let done = false;
+    const end = () => { if (!done) { done = true; clearTimeout(tid); clearInterval(wid); res(); } };
+    u.onend = end; u.onerror = end;
+    const tid = setTimeout(() => { window.speechSynthesis.cancel(); end(); }, 35000);
+    const wid = setInterval(() => { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); if (done) clearInterval(wid); }, 7000);
+    window.speechSynthesis.speak(u);
+  });
+}
+
+function previewVoz() {
+  speak('Kira online. Sistemas sincronizados e prontos para análise da operação da usina.');
+}
+
+/* ═══════════════════════════════════════════════
+   METRIC CARDS
+═══════════════════════════════════════════════ */
+function parseCards(text) {
+  const re = /\{\{CARD:(.*?)\|(.*?)\|(.*?)\}\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) showCard(m[1], m[2], m[3]);
+  return text.replace(re, '').trim();
+}
+
+function showCard(title, val, unit) {
+  const c = document.createElement('div'); c.className = 'mcard';
+  c.innerHTML = `<div class="mc-t">${title}</div><div class="mc-v">${val}</div><div class="mc-l">${unit}</div>`;
+  document.body.appendChild(c);
+  setTimeout(() => { c.classList.add('out'); setTimeout(() => c.remove(), 500); }, 10000);
+}
+
+/* ═══════════════════════════════════════════════
+   CHAT UI
+═══════════════════════════════════════════════ */
+function addChat(role, text) {
+  const box = document.getElementById('chatbox');
+  const d = document.createElement('div');
+  d.className = 'cm cm-' + (role === 'user' ? 'u' : 'k');
+  d.innerHTML = `<div class="cm-lbl">${role === 'user' ? 'VOCÊ' : 'KIRA'}</div>${text.slice(0, 220)}${text.length > 220 ? '…' : ''}`;
+  box.appendChild(d);
+  while (box.children.length > 10) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addLog(msg, type = 'sys') {
+  const log = document.getElementById('log');
+  if (!log) return;
+  const d = document.createElement('div'); d.className = 'le';
+  const c = { user: '#38bdf8', kira: '#ec4899', sys: 'rgba(180,170,200,.25)', err: '#ff5555' };
+  d.style.color = c[type] || c.sys;
+  d.textContent = '[' + new Date().toLocaleTimeString('pt-BR') + '] ' + msg;
+  log.appendChild(d);
+  while (log.children.length > 25) log.removeChild(log.firstChild);
+}
+
+/* ═══════════════════════════════════════════════
+   CONTROLES
+═══════════════════════════════════════════════ */
+function orbTap() {
+  if (!dbReady) { addLog('Aguarde os dados carregarem', 'sys'); return; }
+  if (isBusy) return;
+  if (isRec) stopRec();
+  else { startRec(); }
+}
+
+function toggleHF() {
+  isHF = document.getElementById('hf-tog').checked;
+  if (isHF && dbReady && !isBusy && !isRec) startRec();
+  else if (!isHF && isRec) stopRec();
+}
+
+function openCfg()  { document.getElementById('cfg').classList.add('open'); refreshBrainUI(); refreshCfgDB(); populateBVoices(); }
+function closeCfg() { document.getElementById('cfg').classList.remove('open'); }
+
+/* ═══════════════════════════════════════════════
+   SETTINGS
+═══════════════════════════════════════════════ */
+function saveSettings() {
+  localStorage.setItem('kira_gem',       document.getElementById('gem-key')?.value || '');
+  localStorage.setItem('kira_gem_voice', document.getElementById('gem-voice')?.value || 'Kore');
+  localStorage.setItem('kira_bv',        document.getElementById('bv-sel')?.value || '');
+}
+
+function loadSettings() {
+  const gk = localStorage.getItem('kira_gem')       || '';
+  const gv = localStorage.getItem('kira_gem_voice') || 'Kore';
+  const el = document.getElementById('gem-key');   if (el) el.value = gk;
+  const ev = document.getElementById('gem-voice'); if (ev) ev.value = gv;
+  chatHist = JSON.parse(localStorage.getItem(HKEY) || '[]');
+}
+
+function populateBVoices() {
+  const sel = document.getElementById('bv-sel'); if (!sel) return;
+  const vs  = window.speechSynthesis?.getVoices() || [];
+  const pt  = vs.filter(v => v.lang.startsWith('pt'));
+  const pref = localStorage.getItem('kira_bv') || '';
+  while (sel.options.length > 1) sel.remove(1); /* mantém option "Auto" */
+  pt.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.name; o.textContent = v.name + ' (' + v.lang + ')';
+    if (v.name === pref) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+window.speechSynthesis?.addEventListener('voiceschanged', populateBVoices);
+
+/* ═══════════════════════════════════════════════
+   CURSOR + INIT
+═══════════════════════════════════════════════ */
+let cx = 0, cy = 0, mx = 0, my = 0;
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+(function aC() {
+  cx += (mx-cx)*.13; cy += (my-cy)*.13;
+  const c = document.getElementById('cur');
+  if (c) { c.style.left = cx+'px'; c.style.top = cy+'px'; }
+  requestAnimationFrame(aC);
+})();
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCfg();
+  if (e.key === ' ' && !e.target.matches('input,select,textarea') && !isBusy) {
+    e.preventDefault(); orbTap();
+  }
+});
+
+/* Inicialização ao carregar página */
+window.addEventListener('load', () => {
+  loadSettings();
+  populateBVoices();
+  resW();
+  refreshBrainUI();
+  /* Tela de permissão do mic já está visível por padrão (via HTML) */
+  addLog('KIRA v9 — aguardando permissão de microfone', 'sys');
+});
+</script>
 </body>
 </html>

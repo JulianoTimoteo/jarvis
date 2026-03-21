@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KYRA — AgroAnalytics</title>
+    <title>Kira — AgroAnalytics</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     
@@ -37,25 +37,30 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, transparent 70%);
             border-radius: 50%;
-            filter: blur(20px);
-            transition: all 0.3s ease;
+            filter: blur(25px);
+            transition: all 0.5s ease;
         }
 
         .thinking .orb-glow {
-            background: radial-gradient(circle, rgba(236, 72, 153, 0.3) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 70%);
             animation: pulse-glow 1s infinite alternate;
         }
 
         .listening .orb-glow {
-            background: radial-gradient(circle, rgba(56, 189, 248, 0.4) 0%, transparent 70%);
-            transform: scale(1.2);
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, transparent 70%);
+            transform: scale(1.15);
+        }
+
+        .speaking .orb-glow {
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+            animation: pulse-glow 0.8s infinite alternate;
         }
 
         @keyframes pulse-glow {
-            0% { transform: scale(1); opacity: 0.4; }
-            100% { transform: scale(1.3); opacity: 0.8; }
+            0% { transform: scale(1); opacity: 0.3; }
+            100% { transform: scale(1.2); opacity: 0.5; }
         }
 
         canvas {
@@ -65,16 +70,16 @@
         }
 
         .status-badge {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(255, 255, 255, 0.02);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider {
             position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(255,255,255,0.1); transition: .3s; border-radius: 20px;
+            background-color: rgba(255,255,255,0.05); transition: .3s; border-radius: 20px;
         }
         .slider:before {
             position: absolute; content: ""; height: 14px; width: 14px;
@@ -88,10 +93,10 @@
             display: flex; flex-direction: column; gap: 10px; z-index: 30; pointer-events: none;
         }
         .data-card {
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(13, 17, 23, 0.98);
             border-left: 4px solid #ec4899;
-            padding: 14px; border-radius: 10px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            padding: 14px; border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
             transform: translateX(120%); opacity: 0;
             animation: cardEnter 0.4s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
@@ -99,9 +104,8 @@
         .data-card.fade-out { animation: cardExit 0.6s forwards ease-in; }
         @keyframes cardExit { to { transform: translateX(150%); opacity: 0; } }
 
-        .ts { font-size: 9px; color: rgba(255,255,255,0.25); float: right; margin-top: 2px; }
-
         #calibration-overlay { background: #010409; z-index: 1000; }
+        .log-line { font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px; }
     </style>
 </head>
 <body class="text-slate-200">
@@ -109,39 +113,35 @@
     <div id="calibration-overlay" class="fixed inset-0 flex flex-col items-center justify-center p-8 transition-opacity duration-700">
         <div class="max-w-md w-full text-center space-y-6">
             <div class="space-y-1">
-                <h2 class="font-orbitron text-3xl tracking-[0.3em] text-pink-500">KYRA</h2>
-                <p class="text-[10px] tracking-[0.4em] text-slate-500 uppercase">Consciência Analítica</p>
+                <h2 class="font-orbitron text-3xl tracking-[0.3em] text-pink-500 text-white">KIRA</h2>
+                <p class="text-[10px] tracking-[0.4em] text-slate-500 uppercase">Executive Sênior • v7.5</p>
             </div>
-            
-            <p id="cal-msg" class="text-xs text-slate-400 italic">Sincronizando matrizes e otimizando resposta neural...</p>
-            
+            <p id="cal-msg" class="text-xs text-slate-400 italic">Sincronizando tabelas e bloqueando motor vocal nativo...</p>
             <div class="relative h-1 w-full bg-slate-800 rounded-full overflow-hidden">
                 <div id="calibration-bar" class="absolute top-0 left-0 h-full w-0 bg-pink-500 transition-all duration-300"></div>
             </div>
-
             <button id="btn-init" class="px-12 py-4 bg-pink-500/10 border border-pink-500/30 text-pink-500 font-orbitron text-[10px] tracking-[0.3em] hover:bg-pink-500/20 transition-all rounded-sm uppercase">
-                Aceder ao Sistema
+                Iniciar Handshake
             </button>
         </div>
     </div>
 
     <header class="fixed top-0 w-full p-6 flex justify-between items-center z-50">
         <div class="flex flex-col">
-            <h1 class="font-orbitron text-2xl font-bold tracking-tighter text-pink-500">KYRA</h1>
-            <span class="text-[8px] tracking-[0.5em] text-slate-500 uppercase">Neural Strategic Intelligence</span>
+            <h1 class="font-orbitron text-2xl font-bold tracking-tighter text-pink-500">KIRA</h1>
+            <span class="text-[8px] tracking-[0.5em] text-slate-500 uppercase">Data Integrated • Executive Intelligence</span>
         </div>
-        
         <div class="flex items-center gap-6">
             <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/5">
-                <span class="text-[9px] font-bold tracking-widest text-slate-400">HANDS-FREE</span>
+                <span class="text-[9px] font-bold tracking-widest text-slate-400 uppercase">Modo Mãos Livres</span>
                 <label class="switch">
                     <input type="checkbox" id="continuous-toggle">
                     <span class="slider"></span>
                 </label>
             </div>
             <div id="connection-status" class="status-badge px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-medium tracking-widest">
-                <div id="status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
-                <span id="status-text">KYRA OK</span>
+                <div id="status-dot" class="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]"></div>
+                <span id="status-text">OFFLINE</span>
             </div>
         </div>
     </header>
@@ -152,7 +152,7 @@
             <div class="orb-glow"></div>
             <canvas id="visualizer"></canvas>
             <div class="w-28 h-28 rounded-full border border-pink-500/20 flex items-center justify-center bg-slate-900/40 backdrop-blur-xl relative z-20 shadow-2xl">
-                <div class="absolute w-20 h-20 rounded-full border border-dashed border-pink-400/10 animate-[spin_12s_linear_infinite]"></div>
+                <div class="absolute w-20 h-20 rounded-full border border-dashed border-pink-400/10 animate-[spin_15s_linear_infinite]"></div>
                 <div id="mic-icon" class="text-pink-500">
                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                 </div>
@@ -166,7 +166,7 @@
     <footer class="fixed bottom-0 w-full p-8 flex justify-center z-50 pointer-events-none">
         <div class="w-full max-w-2xl bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-2xl p-4 pointer-events-auto">
             <div class="flex items-center gap-4 mb-2 border-b border-white/5 pb-1">
-                <span class="text-[9px] font-bold tracking-[0.3em] text-pink-500 uppercase">Fluxo Neural Instantâneo (v6.0)</span>
+                <span class="text-[9px] font-bold tracking-[0.3em] text-pink-500 uppercase">Kira Neural Core v7.5</span>
                 <div class="flex-1"></div>
                 <div id="mic-meter" class="h-0.5 w-32 bg-slate-800 rounded-full">
                     <div id="mic-meter-fill" class="h-full w-0 bg-pink-400 transition-all duration-75"></div>
@@ -177,6 +177,12 @@
     </footer>
 
     <script>
+        // BLOQUEIO TOTAL E IRREVERSÍVEL DO MOTOR DE VOZ NATIVO
+        if ('speechSynthesis' in window) {
+            Object.defineProperty(window.speechSynthesis, 'speak', { value: () => { return false; }, writable: false });
+            window.speechSynthesis.cancel();
+        }
+
         const apiKey = ""; 
         const groqKey = "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"; 
 
@@ -190,10 +196,12 @@
             measurementId: "G-6TYZDXMJZ5"
         };
 
-        let isRecording = false, isThinking = false, isCalibrated = false;
+        let isRecording = false, isThinking = false, isSpeaking = false, isCalibrated = false;
         let audioContext, analyser, dataArray, source, animationId, mediaRecorder, audioChunks = [];
         let micStream, db, auth, dbData = {}, currentAudio = null, startTime = 0;
         let continuousMode = false, silenceThreshold = 10, silenceStartTime = null;
+        
+        let chatHistory = JSON.parse(localStorage.getItem('kira_memory') || '[]');
 
         const orbContainer = document.getElementById('orb-container');
         const subtitleText = document.getElementById('st-text');
@@ -213,8 +221,8 @@
         function addToLog(msg, type = 'system') {
             const time = new Date().toLocaleTimeString('pt-BR');
             const p = document.createElement('div');
-            const colors = { user: 'text-sky-400', kyra: 'text-pink-400', system: 'text-slate-500', error: 'text-red-400' };
-            p.className = "mb-1 border-b border-white/5 pb-1";
+            const colors = { user: 'text-sky-400', kira: 'text-pink-400', system: 'text-slate-500', error: 'text-red-400' };
+            p.className = "log-line";
             p.innerHTML = `<span class="${colors[type]} font-bold text-[8px]">[${time}] ${type.toUpperCase()}:</span> <span>${msg}</span>`;
             chatLog.appendChild(p);
             chatLog.scrollTop = chatLog.scrollHeight;
@@ -222,26 +230,36 @@
 
         async function syncAgroAnalytics() {
             return new Promise(async (resolve) => {
-                calMsg.innerText = "Sincronizando Canais de Dados...";
-                calBar.style.width = "40%";
+                calMsg.innerText = "Conectando ao Firebase Hub...";
+                calBar.style.width = "30%";
                 try {
                     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
                     db = firebase.firestore();
                     auth = firebase.auth();
                     await auth.signInAnonymously();
                     
+                    calMsg.innerText = "Acessando tabelas mestre...";
+                    calBar.style.width = "60%";
+
                     const collections = ['snapshots', 'snapshots_bulk'];
-                    let collectionsLoaded = 0;
+                    let loadedCount = 0;
 
                     collections.forEach(collection => {
                         db.collection(collection).onSnapshot(snapshot => {
-                            snapshot.forEach(doc => { dbData[doc.id] = doc.data(); });
-                            collectionsLoaded++;
-                            if (collectionsLoaded >= 2) {
+                            if (!snapshot.empty) {
+                                snapshot.forEach(doc => { 
+                                    dbData[doc.id] = doc.data(); 
+                                    addToLog(`Data Sync: ${doc.id}`, 'system');
+                                });
+                            }
+                            loadedCount++;
+                            if (loadedCount >= 2) {
                                 calBar.style.width = "100%";
+                                document.getElementById('status-text').innerText = "ONLINE";
+                                document.getElementById('status-dot').className = "w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
                                 resolve(true);
                             }
-                        });
+                        }, () => resolve(false));
                     });
                 } catch (err) { resolve(false); }
             });
@@ -278,7 +296,7 @@
                     calOverlay.classList.add('opacity-0');
                     setTimeout(() => calOverlay.style.display = 'none', 500);
                     isCalibrated = true; drawVisualizer();
-                    await speakNeural("Consciência KYRA ativa. Sistema de dados pré-processados e microfone auto-mute pronto. Como posso ajudar, Senhor?");
+                    await speakNeural("Kira operacional, Senhor. Sistemas de dados sincronizados.");
                 }
             } catch (err) { btnInit.style.display = 'block'; }
         };
@@ -296,26 +314,30 @@
             if (isRecording && continuousMode) {
                 if (avg < silenceThreshold) {
                     if (!silenceStartTime) silenceStartTime = Date.now();
-                    if (Date.now() - silenceStartTime > 700) handleEnd();
+                    if (Date.now() - silenceStartTime > 800) handleEnd();
                 } else { silenceStartTime = null; }
             }
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const center = canvas.width / 2, radius = isRecording ? 72 : 64, bars = 50;
             for (let i = 0; i < bars; i++) {
-                const barHeight = (isRecording || isThinking) ? (dataArray[i] / 2.5) : (avg / 12 + 2);
+                const barHeight = (isRecording || isThinking || isSpeaking) ? (dataArray[i] / 2.5) : (avg / 15 + 1.5);
                 const rads = (Math.PI * 2) / bars, x = center + Math.cos(rads * i) * radius, y = center + Math.sin(rads * i) * radius;
                 const x_end = center + Math.cos(rads * i) * (radius + barHeight), y_end = center + Math.sin(rads * i) * (radius + barHeight);
-                ctx.strokeStyle = `hsla(${isThinking ? 320 : 190}, 80%, 60%, ${0.4 + barHeight / 60})`;
+                
+                let hue = 200; 
+                if (isThinking) hue = 320; 
+                if (isSpeaking) hue = 160; 
+                
+                ctx.strokeStyle = `hsla(${hue}, 80%, 60%, ${0.3 + barHeight / 70})`;
                 ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x_end, y_end); ctx.stroke();
             }
         }
 
         const handleStart = async (e) => {
             if (e && e.cancelable) e.preventDefault();
-            if (!isCalibrated || isThinking || isRecording || currentAudio) return;
+            if (!isCalibrated || isThinking || isRecording || isSpeaking) return;
             
-            // Ativa microfone apenas para ouvir
             micStream.getAudioTracks()[0].enabled = true;
             if (audioContext.state === 'suspended') await audioContext.resume();
             
@@ -325,7 +347,7 @@
             mediaRecorder.start(); isRecording = true;
             document.getElementById('orb-container').classList.add('listening');
             document.getElementById('subtitle').classList.remove('opacity-0');
-            subtitleText.innerText = "OUVINDO...";
+            subtitleText.innerText = "ESCUTANDO...";
         };
 
         const handleEnd = async () => {
@@ -334,12 +356,11 @@
             document.getElementById('orb-container').classList.remove('listening');
             
             mediaRecorder.onstop = async () => {
-                // AUTO-MUTE: Bloqueio físico do microfone durante o processamento
                 micStream.getAudioTracks()[0].enabled = false;
                 const blob = new Blob(audioChunks, { type: 'audio/wav' });
-                if (Date.now() - startTime < 100 || blob.size < 400) { 
+                if (Date.now() - startTime < 150 || blob.size < 400) { 
                     resetState(); 
-                    if (continuousMode) setTimeout(handleStart, 500); 
+                    if (continuousMode && !isSpeaking) setTimeout(handleStart, 600); 
                     return; 
                 }
                 processBrain(blob);
@@ -349,28 +370,33 @@
 
         orbContainer.addEventListener('mousedown', handleStart);
         window.addEventListener('mouseup', handleEnd);
-        contToggle.onchange = (e) => { continuousMode = e.target.checked; if (continuousMode && !isRecording && !isThinking) handleStart(); };
+        contToggle.onchange = (e) => { continuousMode = e.target.checked; if (continuousMode && !isRecording && !isThinking && !isSpeaking) handleStart(); };
 
-        // --- OTIMIZAÇÃO MÁXIMA DE DADOS (PRÉ-RESUMO LOCAL) ---
-        function getNeuralSummary() {
+        function getNeuralSummary(text) {
+            const q = text.toLowerCase();
             const summary = {};
-            for (const table in dbData) {
-                const raw = dbData[table];
-                if (Array.isArray(raw)) {
-                    summary[table] = `[${raw.length} reg. Último: ${JSON.stringify(raw[0]).substring(0,100)}]`;
-                } else {
-                    summary[table] = raw;
+            const keywords = {
+                'acmSafra': ['safra', 'acumulado', 'total'],
+                'producao': ['produção', 'hoje', 'toneladas', 'moagem'],
+                'metas': ['meta', 'objetivo'],
+                'potencial': ['potencial', 'capacidade']
+            };
+            for (const table in keywords) {
+                if (keywords[table].some(k => q.includes(k)) && dbData[table]) {
+                    summary[table] = Array.isArray(dbData[table]) ? dbData[table].slice(0, 3) : dbData[table];
                 }
             }
-            return JSON.stringify(summary).substring(0, 1500); // Teto de segurança para latência
+            // Injetar status de carregamento no resumo para o prompt
+            summary['system_status'] = Object.keys(dbData).length > 0 ? "DATABASE_ACTIVE" : "DATABASE_EMPTY";
+            return JSON.stringify(summary);
         }
 
         async function processBrain(blob) {
-            if (isThinking) return;
+            if (isThinking || isSpeaking) return;
             isThinking = true;
-            const brainStart = Date.now();
+            const bStart = Date.now();
             document.getElementById('orb-container').classList.add('thinking');
-            subtitleText.innerText = "PENSANDO...";
+            subtitleText.innerText = "PROCESSANDO...";
 
             try {
                 const formData = new FormData();
@@ -383,31 +409,50 @@
                     body: formData
                 });
                 const text = (await wRes.json()).text;
-                const transEnd = Date.now();
-                if (!text || text.length < 2) throw new Error();
+                if (!text || text.split(' ').length < 2) throw new Error("Noise");
                 
                 addToLog(text, 'user');
-                addToLog(`Transcrição: ${transEnd - brainStart}ms`, 'system');
-
-                const summaryContext = getNeuralSummary();
+                const summaryContext = getNeuralSummary(text);
+                const historyCtx = chatHistory.map(h => `${h.role === 'user' ? 'Senhor' : 'Kira'}: ${h.content}`).join('\n');
 
                 const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: `Aja como KYRA, consciência analítica da AgroAnalytics. DADOS RESUMIDOS: ${summaryContext}. COMANDO: ${text}. Instruções: Seja elegante, sofisticada e REATIVA. Responda em no MÁXIMO 12 palavras. Se pedir dados, seja precisa. Use {{CARD:T|V|U}} para métricas. VOZ: Kore.` }] }] })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: `
+                        NOME: Kira. IDENTIDADE: Secretária Executiva Sênior. 
+                        SITUAÇÃO DO BANCO: ${Object.keys(dbData).length > 0 ? 'CONECTADO E ATUALIZADO' : 'DESCONECTADO'}.
+                        DADOS REAIS: ${summaryContext}. 
+                        HISTÓRICO: ${historyCtx}.
+                        COMANDO: ${text}. 
+                        
+                        DIRETRIZES:
+                        1. Responda de forma SÉRIA, RÍGIDA e FORMAL.
+                        2. Se o Senhor perguntar se você está atualizada ou buscou os dados, e a SITUAÇÃO DO BANCO for 'CONECTADO', responda AFIRMATIVAMENTE com os números reais.
+                        3. Máximo 15 palavras.
+                        4. Use {{CARD:T|V|U}} apenas para métricas solicitadas.
+                        5. Única voz permitida: Kore. NUNCA mencione que é uma IA.
+                        6. Trate como Senhor.` }] }] })
                 });
+                
                 const replyRaw = (await gRes.json()).candidates[0].content.parts[0].text;
-                const thinkEnd = Date.now();
-                addToLog(`Cérebro: ${thinkEnd - transEnd}ms`, 'system');
-
                 const cleanReply = parseCards(replyRaw);
-                await speakNeural(cleanReply, thinkEnd);
-            } catch (err) { resetState(); if (continuousMode) setTimeout(handleStart, 1000); }
+                
+                chatHistory.push({ role: 'user', content: text }, { role: 'kira', content: cleanReply });
+                if (chatHistory.length > 15) chatHistory = chatHistory.slice(-15);
+                localStorage.setItem('kira_memory', JSON.stringify(chatHistory));
+
+                await speakNeural(cleanReply, Date.now() - bStart);
+            } catch (err) { resetState(); if (continuousMode) setTimeout(handleStart, 800); }
         }
 
-        async function speakNeural(text, thinkEnd) {
-            addToLog(text, 'kyra');
+        async function speakNeural(text, lat) {
+            if (isSpeaking) return;
+            isSpeaking = true; isThinking = false;
+            document.getElementById('orb-container').classList.remove('thinking');
+            document.getElementById('orb-container').classList.add('speaking');
+            addToLog(text, 'kira');
             subtitleText.innerText = text;
+
             try {
                 const ttsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
                     method: 'POST',
@@ -424,26 +469,31 @@
                 const pcm = ttsData.candidates[0].content.parts[0].inlineData.data;
                 const mime = ttsData.candidates[0].content.parts[0].inlineData.mimeType;
                 const wav = pcmToWav(pcm, parseInt(mime.split('rate=')[1]) || 24000);
+                
+                // Sistema de canal único de áudio
+                if(currentAudio) { currentAudio.pause(); currentAudio = null; }
                 const audio = new Audio(URL.createObjectURL(new Blob([wav], { type: 'audio/wav' })));
                 currentAudio = audio;
                 
-                const ttsEnd = Date.now();
-                addToLog(`Voz Neural: ${ttsEnd - thinkEnd}ms`, 'system');
+                addToLog(`Ciclo Neural: ${lat}ms`, 'system');
 
                 if (audioContext.state === 'suspended') await audioContext.resume();
                 await audio.play();
                 audio.onended = () => { 
-                    currentAudio = null; 
+                    currentAudio = null; isSpeaking = false;
                     resetState(); 
-                    if (continuousMode) setTimeout(handleStart, 300); 
+                    if (continuousMode) setTimeout(handleStart, 400); 
                 };
-            } catch (err) { resetState(); if (continuousMode) setTimeout(handleStart, 800); }
+            } catch (err) { 
+                isSpeaking = false; resetState(); 
+                if (continuousMode) setTimeout(handleStart, 800); 
+            }
         }
 
         function resetState() {
             isThinking = false; isRecording = false;
-            document.getElementById('orb-container').classList.remove('thinking', 'listening');
-            setTimeout(() => { if(!isThinking && !isRecording) document.getElementById('subtitle').classList.add('opacity-0'); }, 3000);
+            document.getElementById('orb-container').classList.remove('thinking', 'listening', 'speaking');
+            setTimeout(() => { if(!isThinking && !isRecording && !isSpeaking) document.getElementById('subtitle').classList.add('opacity-0'); }, 3000);
         }
 
         function pcmToWav(base64, rate) {
@@ -460,7 +510,7 @@
             return combined.buffer;
         }
 
-        window.onload = () => { console.log("KYRA v6.0 Neural Awareness Online."); };
+        window.onload = () => { console.log("KIRA v7.5 Single-Voice Handshake complete."); };
     </script>
 </body>
 </html>

@@ -10,10 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="KIRA">
 <title>KIRA — AgroAnalytics</title>
 
-<!-- PWA Manifest inline -->
-<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22KIRA%20AgroAnalytics%22%2C%22short_name%22%3A%22KIRA%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a0010%22%2C%22theme_color%22%3A%22%23ec4899%22%2C%22start_url%22%3A%22.%22%7D">
-
-<!-- Firebase SDK — tags estáticas, carregam antes do JS -->
+<!-- Firebase SDK — carrega síncrono, antes de qualquer JS -->
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
@@ -23,71 +20,90 @@
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 :root{
-  --bg:#0a0010; --pk:#ec4899; --pk2:#f472b6;
-  --teal:#2dd4bf; --sky:#38bdf8; --violet:#a78bfa;
+  --bg:#0a0010;
+  --pk:#ec4899; --pk2:#f472b6;
+  --teal:#2dd4bf; --sky:#38bdf8; --vio:#a78bfa;
   --txt:rgba(220,215,235,.88);
   --oc:var(--pk); --og:rgba(236,72,153,.7);
   --st:env(safe-area-inset-top,0px);
   --sb:env(safe-area-inset-bottom,0px);
 }
-body.s-listen{--oc:var(--sky);   --og:rgba(56,189,248,.8);}
-body.s-think {--oc:var(--violet);--og:rgba(167,139,250,.8);}
-body.s-speak {--oc:var(--teal);  --og:rgba(45,212,191,.8);}
-body.s-error {--oc:#ff4060;      --og:rgba(255,64,96,.8);}
+body.sl{--oc:var(--sky);  --og:rgba(56,189,248,.8);}
+body.st{--oc:var(--vio);  --og:rgba(167,139,250,.8);}
+body.ss{--oc:var(--teal); --og:rgba(45,212,191,.8);}
 
 html,body{width:100dvw;height:100dvh;overflow:hidden;
   background:var(--bg);color:var(--txt);
-  font-family:'Inter',sans-serif;
-  user-select:none;-webkit-touch-callout:none;}
-
-/* Grid subtle bg */
+  font-family:'Inter',sans-serif;user-select:none;-webkit-touch-callout:none;}
 body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:linear-gradient(rgba(236,72,153,.016) 1px,transparent 1px),
-             linear-gradient(90deg,rgba(236,72,153,.016) 1px,transparent 1px);
-  background-size:58px 58px;}
+  background:linear-gradient(rgba(236,72,153,.015) 1px,transparent 1px),
+             linear-gradient(90deg,rgba(236,72,153,.015) 1px,transparent 1px);
+  background-size:60px 60px;}
 
-/* ── BOOT SPLASH (aparece no centro, desaparece sozinha) ── */
-#boot{
-  position:fixed;inset:0;z-index:500;
+/* ══ INIT SCREEN (única tela de espera) ══ */
+#init{
+  position:fixed;inset:0;z-index:800;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:0;background:radial-gradient(ellipse at 50% 46%,#1a0028 0%,#0a0010 68%);
-  transition:opacity .55s ease;pointer-events:all;
+  background:radial-gradient(ellipse at 50% 46%,#1a0028 0%,#0a0010 68%);
+  transition:opacity .55s ease;
+  padding:28px 28px calc(var(--sb)+28px);gap:0;
 }
-#boot.out{opacity:0;pointer-events:none;}
-#boot.gone{display:none;}
+#init.out{opacity:0;pointer-events:none;}
+#init.gone{display:none;}
 
-.bl{font-family:'Orbitron',monospace;font-weight:900;
+.ilogo{font-family:'Orbitron',monospace;font-weight:900;
   font-size:clamp(3rem,13vw,6rem);letter-spacing:.4em;
   background:linear-gradient(140deg,#fff 0%,#f9a8d4 45%,#ec4899 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   filter:drop-shadow(0 0 22px rgba(236,72,153,.5));margin-bottom:4px;}
-.be{font-size:.44rem;letter-spacing:.4em;color:rgba(236,72,153,.28);
-  text-transform:uppercase;margin-bottom:clamp(26px,5vmin,44px);}
+.isub{font-size:.44rem;letter-spacing:.4em;color:rgba(236,72,153,.28);
+  text-transform:uppercase;margin-bottom:clamp(24px,5vmin,40px);}
 
-.brw{position:relative;width:clamp(110px,26vmin,155px);height:clamp(110px,26vmin,155px);
+/* Ring progress */
+.irw{position:relative;width:clamp(110px,26vmin,155px);height:clamp(110px,26vmin,155px);
   display:flex;align-items:center;justify-content:center;
-  margin-bottom:clamp(20px,4vmin,34px);}
-.brw svg{position:absolute;inset:0;width:100%;height:100%;}
-.rt2{fill:none;stroke:rgba(236,72,153,.08);stroke-width:2;}
-.rf2{fill:none;stroke:var(--pk);stroke-width:2;stroke-linecap:round;
+  margin-bottom:clamp(18px,4vmin,32px);}
+.irw svg{position:absolute;inset:0;width:100%;height:100%;}
+.rt{fill:none;stroke:rgba(236,72,153,.08);stroke-width:2;}
+.rf{fill:none;stroke:var(--pk);stroke-width:2;stroke-linecap:round;
   stroke-dasharray:440;stroke-dashoffset:440;
-  transition:stroke-dashoffset .3s ease;
-  filter:drop-shadow(0 0 3px var(--pk));}
-.boc{width:clamp(48px,12vmin,70px);height:clamp(48px,12vmin,70px);
-  border-radius:50%;z-index:2;
+  transition:stroke-dashoffset .35s ease;filter:drop-shadow(0 0 3px var(--pk));}
+.ioc{width:clamp(48px,12vmin,70px);height:clamp(48px,12vmin,70px);border-radius:50%;z-index:2;
   background:radial-gradient(circle at 38% 33%,rgba(255,255,255,.9) 0%,#ec4899 28%,rgba(60,0,80,.5) 62%,transparent 82%);
   box-shadow:0 0 28px rgba(236,72,153,.8),0 0 56px rgba(236,72,153,.3);
-  animation:bocP 2.5s ease-in-out infinite;}
-@keyframes bocP{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
+  animation:iocP 2.5s ease-in-out infinite;}
+@keyframes iocP{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
 
-.bm{font-size:clamp(.44rem,.56rem,.52rem);letter-spacing:.18em;
-  color:rgba(236,72,153,.44);text-align:center;min-height:16px;margin-bottom:9px;}
-.bpw{width:160px;height:2px;background:rgba(236,72,153,.1);border-radius:1px;overflow:hidden;}
-.bpb{height:100%;width:0%;
+.imsg{font-size:clamp(.44rem,.56rem,.52rem);letter-spacing:.16em;
+  color:rgba(236,72,153,.42);text-align:center;min-height:18px;margin-bottom:8px;}
+.ipw{width:180px;height:2px;background:rgba(236,72,153,.1);border-radius:1px;overflow:hidden;}
+.ipb{height:100%;width:0%;
   background:linear-gradient(90deg,#be185d,#ec4899,#f9a8d4);
   border-radius:1px;transition:width .3s ease;box-shadow:0 0 5px var(--pk);}
 
-/* ── STATUS BAR ── */
+/* O botão principal — aparece quando dados carregados */
+#init-btn{
+  margin-top:clamp(16px,3vmin,26px);
+  padding:15px 44px;
+  border:1.5px solid rgba(236,72,153,.4);
+  background:rgba(236,72,153,.1);
+  color:rgba(236,72,153,.88);
+  font-family:'Orbitron',monospace;
+  font-size:clamp(.5rem,.68rem,.62rem);letter-spacing:.3em;
+  border-radius:6px;cursor:pointer;touch-action:manipulation;
+  transition:all .22s;display:none;
+}
+#init-btn:hover,#init-btn:active{
+  background:rgba(236,72,153,.22);
+  box-shadow:0 0 28px rgba(236,72,153,.3);}
+#init-btn.show{display:block;animation:btnIn .4s ease;}
+@keyframes btnIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+.ierr{margin-top:14px;font-size:.55rem;letter-spacing:.08em;
+  color:rgba(255,80,100,.68);text-align:center;
+  max-width:280px;line-height:1.9;display:none;}
+
+/* ══ APP INTERFACE ══ */
 #hdr{position:fixed;top:0;left:0;right:0;z-index:60;pointer-events:none;
   padding:calc(var(--st)+9px) 15px 9px;
   display:flex;align-items:center;justify-content:space-between;
@@ -95,25 +111,24 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .hl{font-family:'Orbitron',monospace;font-weight:900;font-size:1.1rem;
   letter-spacing:.3em;color:var(--pk);text-shadow:0 0 14px rgba(236,72,153,.4);}
 .hr{display:flex;align-items:center;gap:8px;pointer-events:all;}
-.cb2{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:18px;
+.cob{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:18px;
   background:rgba(236,72,153,.06);border:1px solid rgba(236,72,153,.1);
   font-size:.4rem;letter-spacing:.18em;color:rgba(236,72,153,.38);}
-.cd{width:5px;height:5px;border-radius:50%;background:#f59e0b;
+.cod{width:5px;height:5px;border-radius:50%;background:#f59e0b;
   box-shadow:0 0 5px #f59e0b;transition:background .4s,box-shadow .4s;}
-.cd.ok{background:#10b981;box-shadow:0 0 5px #10b981;}
-.ib{width:30px;height:30px;border-radius:50%;
+.cod.ok{background:#10b981;box-shadow:0 0 5px #10b981;}
+.icb{width:30px;height:30px;border-radius:50%;
   background:rgba(236,72,153,.07);border:1px solid rgba(236,72,153,.1);
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;touch-action:manipulation;transition:all .2s;
   color:rgba(236,72,153,.4);font-size:.85rem;}
-.ib:hover,.ib:active{background:rgba(236,72,153,.16);color:var(--pk);}
+.icb:hover,.icb:active{background:rgba(236,72,153,.16);color:var(--pk);}
 
-/* ── MAIN ── */
 #main{position:relative;z-index:10;width:100%;height:100dvh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:calc(var(--st)+54px) 20px calc(var(--sb)+130px);}
+  padding:calc(var(--st)+54px) 20px calc(var(--sb)+128px);}
 
-/* ── ORB STAGE ── */
+/* ── ORB ── */
 #stage{position:relative;width:clamp(210px,52vmin,296px);height:clamp(210px,52vmin,296px);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 #wc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
@@ -125,39 +140,36 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .dr2{inset:16px;border:1px dashed rgba(236,72,153,.06);animation:drR 13s linear infinite reverse;}
 .dr3{inset:30px;border:1px solid rgba(236,72,153,.04);animation:drR 8s linear infinite;}
 @keyframes drR{to{transform:rotate(360deg);}}
-
 #orb{position:relative;z-index:5;
   width:clamp(86px,22vmin,122px);height:clamp(86px,22vmin,122px);
-  border-radius:50%;cursor:pointer;touch-action:manipulation;}
+  border-radius:50%;cursor:pointer;touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;}
 #orb-c{width:100%;height:100%;border-radius:50%;
   background:radial-gradient(circle at 38% 33%,rgba(255,255,255,.92) 0%,var(--oc) 28%,rgba(40,0,60,.55) 65%,transparent 85%);
-  box-shadow:0 0 0 1px rgba(255,255,255,.05),0 0 20px 5px var(--og),
+  box-shadow:0 0 0 1px rgba(255,255,255,.05),
+    0 0 20px 5px var(--og),
     0 0 55px 15px color-mix(in srgb,var(--og) 38%,transparent),
     0 0 100px 28px color-mix(in srgb,var(--og) 16%,transparent);
-  animation:oIdle 3.5s ease-in-out infinite;transition:background .5s,box-shadow .5s;}
-body.s-listen #orb-c{animation:oL .5s ease-in-out infinite alternate;}
-body.s-think  #orb-c{animation:oT 1.2s ease-in-out infinite;}
-body.s-speak  #orb-c{animation:oS .38s ease-in-out infinite alternate;}
-body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
-@keyframes oIdle{0%,100%{transform:scale(1);}50%{transform:scale(1.03);}}
+  animation:oI 3.5s ease-in-out infinite;transition:background .5s,box-shadow .5s;}
+body.sl #orb-c{animation:oL .5s ease-in-out infinite alternate;}
+body.st #orb-c{animation:oT 1.2s ease-in-out infinite;}
+body.ss #orb-c{animation:oS .38s ease-in-out infinite alternate;}
+@keyframes oI{0%,100%{transform:scale(1);}50%{transform:scale(1.03);}}
 @keyframes oL{from{transform:scale(.93);}to{transform:scale(1.1);}}
 @keyframes oT{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.09);opacity:1;}}
 @keyframes oS{from{transform:scale(.97);}to{transform:scale(1.1);}}
-@keyframes oE{from{transform:scale(.97);}to{transform:scale(1.05);}}
-
 #slbl{position:absolute;bottom:clamp(-46px,-8vmin,-36px);left:50%;
-  transform:translateX(-50%);
-  font-family:'Orbitron',monospace;font-size:clamp(.37rem,.49rem,.45rem);
-  letter-spacing:.5em;color:var(--oc);white-space:nowrap;
-  opacity:.65;text-shadow:0 0 10px var(--og);transition:color .4s;}
-
+  transform:translateX(-50%);font-family:'Orbitron',monospace;
+  font-size:clamp(.37rem,.49rem,.45rem);letter-spacing:.5em;
+  color:var(--oc);white-space:nowrap;opacity:.65;
+  text-shadow:0 0 10px var(--og);transition:color .4s;}
 #sub{margin-top:clamp(42px,8vmin,58px);font-size:clamp(.73rem,.9rem,.82rem);
   font-weight:300;letter-spacing:.05em;color:rgba(236,72,153,.62);
   text-align:center;max-width:82vw;min-height:38px;line-height:1.75;
   transition:opacity .3s;opacity:0;}
 
 /* ── CHAT BUBBLES ── */
-#chatbox{position:fixed;bottom:calc(var(--sb)+128px);left:0;right:0;
+#chatbox{position:fixed;bottom:calc(var(--sb)+126px);left:0;right:0;
   max-height:22vh;overflow-y:auto;padding:4px 14px;
   display:flex;flex-direction:column;gap:6px;pointer-events:none;z-index:20;
   mask-image:linear-gradient(transparent 0%,black 28%,black 100%);
@@ -202,120 +214,31 @@ body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
 .sw input:checked+.sws{background:var(--pk);}
 .sw input:checked+.sws::before{transform:translateX(17px);}
 #dbi{font-size:.38rem;letter-spacing:.13em;color:rgba(236,72,153,.25);}
-#log{max-height:44px;overflow:hidden;font-size:.4rem;line-height:1.55;
+#log{max-height:42px;overflow:hidden;font-size:.4rem;line-height:1.55;
   color:rgba(180,170,200,.24);letter-spacing:.05em;cursor:pointer;transition:max-height .3s;}
-#log.exp{max-height:78px;}
+#log.exp{max-height:76px;}
 .le{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
-/* ── MIC PERMISSION BOTTOM SHEET (PWA style) ── */
-#mic-sheet{
-  position:fixed;bottom:0;left:0;right:0;z-index:300;
-  background:linear-gradient(175deg,rgba(14,0,24,.99),rgba(8,0,16,.995));
-  border-top:1px solid rgba(236,72,153,.2);
-  border-radius:22px 22px 0 0;
-  padding:0 20px calc(var(--sb)+16px);
-  transform:translateY(100%);
-  transition:transform .48s cubic-bezier(.34,1.2,.64,1);
-  box-shadow:0 -20px 60px rgba(236,72,153,.07);
-}
-#mic-sheet.up{transform:translateY(0);}
-.ms-grip{width:36px;height:3px;background:rgba(236,72,153,.2);
-  border-radius:2px;margin:14px auto 16px;}
-
-/* PWA mic card */
-.ms-card{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px;}
-.ms-icon{width:44px;height:44px;border-radius:12px;flex-shrink:0;
-  background:rgba(236,72,153,.12);border:1px solid rgba(236,72,153,.25);
-  display:flex;align-items:center;justify-content:center;font-size:1.3rem;}
-.ms-copy{}
-.ms-title{font-family:'Orbitron',monospace;font-size:.6rem;letter-spacing:.22em;
-  color:rgba(236,72,153,.85);margin-bottom:5px;}
-.ms-body{font-size:.56rem;line-height:1.75;color:rgba(200,190,220,.5);letter-spacing:.06em;}
-.ms-body b{color:rgba(236,72,153,.65);}
-
-.ms-btns{display:flex;gap:8px;}
-.ms-allow{flex:1;padding:13px;border-radius:10px;
-  background:rgba(236,72,153,.15);border:1.5px solid rgba(236,72,153,.4);
-  color:rgba(236,72,153,.9);font-family:'Orbitron',monospace;
-  font-size:.52rem;letter-spacing:.22em;cursor:pointer;touch-action:manipulation;
-  transition:all .22s;text-align:center;}
-.ms-allow:hover,.ms-allow:active{background:rgba(236,72,153,.28);
-  box-shadow:0 0 24px rgba(236,72,153,.3);}
-.ms-skip{padding:13px 16px;border-radius:10px;
-  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
-  color:rgba(255,255,255,.25);font-size:.52rem;letter-spacing:.16em;
-  cursor:pointer;touch-action:manipulation;transition:all .22s;}
-.ms-skip:hover,.ms-skip:active{color:rgba(255,255,255,.45);}
-
-/* Error state inside sheet */
-.ms-err{margin-top:12px;font-size:.52rem;letter-spacing:.08em;
-  color:rgba(255,80,100,.65);line-height:1.8;display:none;
-  background:rgba(255,50,80,.05);border:1px solid rgba(255,50,80,.12);
-  border-radius:8px;padding:10px 12px;}
-.ms-err b{color:rgba(255,100,120,.8);}
-.ms-err code{font-family:'Orbitron',monospace;font-size:.44rem;
-  background:rgba(0,0,0,.3);padding:2px 6px;border-radius:3px;
-  color:rgba(200,200,255,.6);}
-
-/* file:// protocol guide */
-.ms-guide{margin-top:12px;display:none;}
-.ms-guide-title{font-size:.46rem;letter-spacing:.16em;
-  color:rgba(236,72,153,.4);text-transform:uppercase;margin-bottom:10px;
-  font-family:'Orbitron',monospace;}
-.gtabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap;}
-.gtab{padding:5px 10px;border-radius:5px;
-  border:1px solid rgba(236,72,153,.18);background:rgba(236,72,153,.05);
-  color:rgba(236,72,153,.45);font-size:.4rem;letter-spacing:.12em;
-  cursor:pointer;transition:all .2s;touch-action:manipulation;
-  font-family:'Orbitron',monospace;}
-.gtab.act,.gtab:hover{background:rgba(236,72,153,.16);color:rgba(236,72,153,.88);
-  border-color:rgba(236,72,153,.36);}
-.gtab-c{display:none;animation:fadeIn .2s ease;}
-.gtab-c.show{display:block;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
-.gcmd{background:rgba(0,0,0,.45);border:1px solid rgba(236,72,153,.14);
-  border-radius:6px;padding:9px 12px;cursor:pointer;transition:border .2s;
-  position:relative;margin-bottom:6px;}
-.gcmd:hover{border-color:rgba(236,72,153,.32);}
-.gcmd-lbl{display:block;font-size:.36rem;color:rgba(236,72,153,.36);
-  letter-spacing:.1em;margin-bottom:4px;text-transform:uppercase;}
-.gcmd code{font-family:'Orbitron',monospace;font-size:.52rem;
-  color:rgba(180,255,180,.82);word-break:break-all;}
-.gcmd-copied{position:absolute;right:8px;top:50%;transform:translateY(-50%);
-  font-size:.36rem;color:rgba(236,72,153,.5);opacity:0;
-  transition:opacity .2s;pointer-events:none;}
-.gcmd.copied .gcmd-copied{opacity:1;}
-.ghint{font-size:.46rem;color:rgba(200,190,220,.4);line-height:1.75;
-  letter-spacing:.05em;margin-top:6px;}
-.ghint b{color:rgba(236,72,153,.55);}
-.ghint a{color:rgba(100,200,255,.6);text-decoration:none;}
-
-/* ── SETTINGS PANEL ── */
-#cfg{position:fixed;top:0;right:0;bottom:0;z-index:400;
-  width:min(295px,88vw);
+/* ── SETTINGS ── */
+#cfg{position:fixed;top:0;right:0;bottom:0;z-index:400;width:min(295px,88vw);
   background:linear-gradient(170deg,rgba(12,0,20,.99),rgba(8,0,14,.995));
   border-left:1px solid rgba(236,72,153,.09);
   transform:translateX(102%);transition:transform .38s cubic-bezier(.34,1.1,.64,1);
   padding:calc(var(--st)+50px) 15px calc(var(--sb)+15px);
   overflow-y:auto;display:flex;flex-direction:column;gap:13px;}
 #cfg.open{transform:translateX(0);}
-.cfghdr{position:absolute;top:calc(var(--st)+11px);left:15px;right:15px;
+.cfgH{position:absolute;top:calc(var(--st)+11px);left:15px;right:15px;
   display:flex;justify-content:space-between;align-items:center;}
-.cfght{font-family:'Orbitron',monospace;font-size:.44rem;letter-spacing:.26em;
-  color:rgba(236,72,153,.35);}
-.cfghx{font-size:.95rem;cursor:pointer;color:rgba(236,72,153,.28);
-  padding:4px 7px;transition:color .2s;}
-.cfghx:hover{color:#ff1744;}
+.cfgHt{font-family:'Orbitron',monospace;font-size:.44rem;letter-spacing:.26em;color:rgba(236,72,153,.35);}
+.cfgHx{font-size:.95rem;cursor:pointer;color:rgba(236,72,153,.28);padding:4px 7px;transition:color .2s;}
+.cfgHx:hover{color:#ff1744;}
 .cs{border-bottom:1px solid rgba(236,72,153,.07);padding-bottom:12px;}
-.ct{font-family:'Orbitron',monospace;font-size:.41rem;letter-spacing:.24em;
-  color:rgba(236,72,153,.32);margin-bottom:8px;}
-.cl{font-size:.5rem;letter-spacing:.09em;color:rgba(236,72,153,.4);
-  display:block;margin-bottom:4px;}
-.ci{width:100%;background:rgba(236,72,153,.06);
-  border:1px solid rgba(236,72,153,.12);color:var(--txt);
-  font-family:'Inter',sans-serif;font-size:.56rem;
-  padding:7px 9px;border-radius:5px;outline:none;
-  transition:border .2s;-webkit-appearance:none;appearance:none;}
+.ct{font-family:'Orbitron',monospace;font-size:.41rem;letter-spacing:.24em;color:rgba(236,72,153,.32);margin-bottom:8px;}
+.cl{font-size:.5rem;letter-spacing:.09em;color:rgba(236,72,153,.4);display:block;margin-bottom:4px;}
+.ci{width:100%;background:rgba(236,72,153,.06);border:1px solid rgba(236,72,153,.12);
+  color:var(--txt);font-family:'Inter',sans-serif;font-size:.56rem;
+  padding:7px 9px;border-radius:5px;outline:none;transition:border .2s;
+  -webkit-appearance:none;appearance:none;}
 .ci:focus{border-color:rgba(236,72,153,.35);}
 .ci option{background:#0a0010;}
 .cbtn{width:100%;padding:8px;border:1px solid rgba(236,72,153,.18);
@@ -325,12 +248,11 @@ body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
 .cbtn:hover,.cbtn:active{background:rgba(236,72,153,.15);color:rgba(236,72,153,.92);}
 .cbtn.red{border-color:rgba(255,23,68,.22);background:rgba(255,23,68,.05);color:rgba(255,80,100,.5);}
 .cbtn.red:hover{background:rgba(255,23,68,.13);}
-#brainst{font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;
-  letter-spacing:.07em;white-space:pre-wrap;}
+#brainst{font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;}
 .cnote{font-size:.44rem;color:rgba(236,72,153,.3);line-height:1.8;letter-spacing:.06em;
   padding:8px 10px;background:rgba(236,72,153,.04);border-radius:5px;
   border-left:2px solid rgba(236,72,153,.2);}
-.cnote a{color:rgba(100,200,255,.55);text-decoration:none;}
+.cnote a{color:rgba(100,200,255,.55);}
 
 /* desktop cursor */
 @media(hover:hover){body{cursor:none;}}
@@ -343,39 +265,40 @@ body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
 </head>
 <body>
 
-<!-- ════ BOOT SPLASH (desaparece automático) ════ -->
-<div id="boot">
-  <div class="bl">KIRA</div>
-  <div class="be">Executive Intelligence · AgroAnalytics</div>
-  <div class="brw">
+<!-- ════ INIT (boot + único pedido de mic) ════ -->
+<div id="init">
+  <div class="ilogo">KIRA</div>
+  <div class="isub">Executive Intelligence · AgroAnalytics</div>
+  <div class="irw">
     <svg viewBox="0 0 140 140">
-      <circle class="rt2" cx="70" cy="70" r="68"/>
-      <circle class="rf2" id="rf2" cx="70" cy="70" r="68"/>
+      <circle class="rt" cx="70" cy="70" r="68"/>
+      <circle class="rf" id="irf" cx="70" cy="70" r="68"/>
     </svg>
-    <div class="boc"></div>
+    <div class="ioc"></div>
   </div>
-  <div class="bm" id="bm">Iniciando…</div>
-  <div class="bpw"><div class="bpb" id="bpb"></div></div>
+  <div class="imsg" id="imsg">Carregando dados…</div>
+  <div class="ipw"><div class="ipb" id="ipb"></div></div>
+  <!-- Botão aparece SÓ quando Firebase carregou -->
+  <button id="init-btn" onclick="handshake()">🎙 INICIAR KIRA</button>
+  <div class="ierr" id="ierr"></div>
 </div>
 
-<!-- ════ CURSOR ════ -->
+<!-- ════ INTERFACE PRINCIPAL ════ -->
 <div id="cur"></div>
 
-<!-- ════ HEADER ════ -->
 <div id="hdr">
   <div class="hl">KIRA</div>
   <div class="hr">
-    <div class="cb2"><div class="cd" id="cnd"></div><span id="cnt">OFFLINE</span></div>
-    <div class="ib" onclick="openCfg()">⚙</div>
+    <div class="cob"><div class="cod" id="cnd"></div><span id="cnt">OFFLINE</span></div>
+    <div class="icb" onclick="openCfg()">⚙</div>
   </div>
 </div>
 
-<!-- ════ MAIN ════ -->
 <div id="main">
   <div id="stage">
     <canvas id="wc"></canvas>
     <div class="dr dr1"></div><div class="dr dr2"></div><div class="dr dr3"></div>
-    <div id="orb" onclick="orbTap()"><div id="orb-c"></div></div>
+    <div id="orb" onclick="orbClick()"><div id="orb-c"></div></div>
     <div id="slbl">AGUARDANDO</div>
   </div>
   <div id="sub"></div>
@@ -383,68 +306,6 @@ body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
 
 <div id="chatbox"></div>
 
-<!-- ════ MIC PERMISSION — PWA BOTTOM SHEET ════ -->
-<div id="mic-sheet">
-  <div class="ms-grip"></div>
-
-  <div class="ms-card">
-    <div class="ms-icon">🎙️</div>
-    <div class="ms-copy">
-      <div class="ms-title">ACESSO AO MICROFONE</div>
-      <div class="ms-body" id="ms-body">
-        Para ouvir comandos de voz, o KIRA precisa<br>
-        acessar o microfone do dispositivo.
-      </div>
-    </div>
-  </div>
-
-  <div class="ms-btns" id="ms-btns">
-    <button class="ms-allow" id="ms-allow-btn" onclick="allowMic()">
-      🎤 PERMITIR
-    </button>
-    <button class="ms-skip" onclick="skipMic()">
-      Sem voz
-    </button>
-  </div>
-
-  <div class="ms-err" id="ms-err"></div>
-
-  <!-- Guia para file:// -->
-  <div class="ms-guide" id="ms-guide">
-    <div class="ms-guide-title">Como rodar via localhost:</div>
-    <div class="gtabs">
-      <button class="gtab act" onclick="showTab('win',this)">Windows</button>
-      <button class="gtab" onclick="showTab('mac',this)">Mac/Linux</button>
-      <button class="gtab" onclick="showTab('node',this)">Node.js</button>
-    </div>
-    <div class="gtab-c show" id="tc-win">
-      <div class="gcmd" onclick="copyCmd(this)">
-        <span class="gcmd-lbl">Prompt de Comando — na pasta do arquivo:</span>
-        <code>python -m http.server 8000</code>
-        <span class="gcmd-copied">✓ copiado</span>
-      </div>
-      <div class="ghint">Depois abra: <a href="http://localhost:8000" target="_blank"><b>http://localhost:8000</b></a></div>
-    </div>
-    <div class="gtab-c" id="tc-mac">
-      <div class="gcmd" onclick="copyCmd(this)">
-        <span class="gcmd-lbl">Terminal — na pasta do arquivo:</span>
-        <code>python3 -m http.server 8000</code>
-        <span class="gcmd-copied">✓ copiado</span>
-      </div>
-      <div class="ghint">Depois abra: <a href="http://localhost:8000" target="_blank"><b>http://localhost:8000</b></a></div>
-    </div>
-    <div class="gtab-c" id="tc-node">
-      <div class="gcmd" onclick="copyCmd(this)">
-        <span class="gcmd-lbl">Qualquer terminal (requer Node.js):</span>
-        <code>npx serve . -p 8000</code>
-        <span class="gcmd-copied">✓ copiado</span>
-      </div>
-      <div class="ghint">Depois abra: <a href="http://localhost:8000" target="_blank"><b>http://localhost:8000</b></a></div>
-    </div>
-  </div>
-</div>
-
-<!-- ════ BOTTOM BAR ════ -->
 <div id="bar">
   <div class="brow">
     <div class="hfw">
@@ -461,22 +322,22 @@ body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
 
 <!-- ════ SETTINGS ════ -->
 <div id="cfg">
-  <div class="cfghdr">
-    <span class="cfght">◆ CONFIGURAÇÕES</span>
-    <span class="cfghx" onclick="closeCfg()">✕</span>
+  <div class="cfgH">
+    <span class="cfgHt">◆ CONFIGURAÇÕES</span>
+    <span class="cfgHx" onclick="closeCfg()">✕</span>
   </div>
   <div class="cs">
     <div class="ct">🎙 VOZ TTS</div>
-    <div class="cnote">Para voz feminina de alta qualidade:<br>
-      Gemini API key gratuita em <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
+    <div class="cnote">Voz feminina de alta qualidade:<br>
+      API key gratuita em <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
     </div>
     <label class="cl" style="margin-top:9px">Gemini API Key</label>
     <input class="ci" id="gem-key" type="password" placeholder="AIza…" oninput="saveSettings()">
-    <label class="cl" style="margin-top:7px">Voz Gemini (feminina)</label>
+    <label class="cl" style="margin-top:7px">Voz Gemini</label>
     <select class="ci" id="gem-voice" onchange="saveSettings()">
-      <option value="Kore">Kore — Profundo</option>
-      <option value="Aoede">Aoede — Suave</option>
-      <option value="Leda">Leda — Jovem</option>
+      <option value="Kore">Kore — Feminino profundo</option>
+      <option value="Aoede">Aoede — Feminino suave</option>
+      <option value="Leda">Leda — Feminino jovem</option>
       <option value="Sulafat">Sulafat — Caloroso</option>
       <option value="Charon">Charon — Firme</option>
       <option value="Zephyr">Zephyr — Neutro</option>
@@ -489,598 +350,673 @@ body.s-error  #orb-c{animation:oE .7s ease-in-out infinite alternate;}
   </div>
   <div class="cs">
     <div class="ct">🧠 KIRA BRAIN</div>
-    <div id="brainst">Carregando…</div>
+    <div id="brainst">—</div>
     <button class="cbtn" onclick="exportBrain()">↓ EXPORTAR BRAIN.JSON</button>
     <button class="cbtn red" style="margin-top:5px" onclick="resetBrain()">⚠ RESETAR BRAIN</button>
   </div>
   <div class="cs">
     <div class="ct">📊 FIREBASE</div>
-    <div id="cfg-db" style="font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;">Carregando…</div>
+    <div id="cfg-db" style="font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;">—</div>
     <button class="cbtn" style="margin-top:7px" onclick="reloadDB()">↻ RECARREGAR</button>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     SCRIPT
-═══════════════════════════════════════════════════════ -->
 <script>
 'use strict';
 
-/* ─── CONFIG ─────────────────────────────────── */
-const FB_CFG={
-  apiKey:'AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc',
-  authDomain:'agroanalytics-api.firebaseapp.com',
-  projectId:'agroanalytics-api',
-  storageBucket:'agroanalytics-api.firebasestorage.app',
-  messagingSenderId:'739888244342',
-  appId:'1:739888244342:web:558d620583469ec515e157'
+/* ══════════════════════════════════════════════
+   CONFIG
+══════════════════════════════════════════════ */
+const FB_CFG = {
+  apiKey:            'AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc',
+  authDomain:        'agroanalytics-api.firebaseapp.com',
+  projectId:         'agroanalytics-api',
+  storageBucket:     'agroanalytics-api.firebasestorage.app',
+  messagingSenderId: '739888244342',
+  appId:             '1:739888244342:web:558d620583469ec515e157'
 };
-const GROQ='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';
-const BKEY='kira_brain_v2', HKEY='kira_hist', SKEY='kira_settings';
-const IS_FILE = location.protocol === 'file:';
+const GROQ = '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';
+const BKEY = 'kira_brain_v2';
+const HKEY = 'kira_hist';
 
-/* ─── STATE ──────────────────────────────────── */
-let db=null, dbData={}, dbReady=false;
-let micStream=null, audioCtx=null, analyser=null;
-let recorder=null, recChunks=[], isRec=false;
-let isBusy=false, isHF=false, micGranted=false;
-let silCheckId=null, silStart=null, recStart=0;
-let curState='idle', chatHist=[], currentAudio=null;
+/* ══════════════════════════════════════════════
+   ESTADO — variáveis simples, sem complexidade
+══════════════════════════════════════════════ */
+let db = null, dbData = {}, dbReady = false;
+let micStream = null, audioCtx = null, analyser = null;
+let recorder = null, audioChunks = [];
+let isRecording = false, isThinking = false, isSpeaking = false;
+let continuousMode = false;
+let silenceStart = null, silCheckId = null, recStart = 0;
+let currentAudio = null;
+let curState = 'idle';
+let chatHist = [];
 
-/* ─── BRAIN ──────────────────────────────────── */
-let brain=loadBrain();
-function iso(){return new Date().toISOString();}
-function loadBrain(){
-  try{const r=localStorage.getItem(BKEY);if(r)return JSON.parse(r);}catch(e){}
-  return{v:2,created:iso(),updated:iso(),interactions:0,
-    domain:{machines:{},operators:{},metrics_history:[]},
-    frequent_queries:[],insights:[],prefs:{style:'concise'}};
+/* ══════════════════════════════════════════════
+   BRAIN
+══════════════════════════════════════════════ */
+let brain = (function() {
+  try { const r = localStorage.getItem(BKEY); if (r) return JSON.parse(r); } catch(e) {}
+  return { v:2, created:new Date().toISOString(), interactions:0,
+    domain:{ machines:{}, operators:{} }, frequent_queries:[], insights:[] };
+})();
+
+function saveBrain() {
+  brain.updated = new Date().toISOString();
+  try { localStorage.setItem(BKEY, JSON.stringify(brain)); } catch(e) {}
+  refreshBrainUI();
 }
-function saveBrain(){brain.updated=iso();try{localStorage.setItem(BKEY,JSON.stringify(brain));}catch(e){}refreshBrainUI();}
 
-function learnFromData(data){
-  const today=iso().split('T')[0];
-  for(const[,rows] of Object.entries(data)){
-    if(!Array.isArray(rows)||!rows.length)continue;
-    const cols=Object.keys(rows[0]).map(c=>c.toLowerCase());
-    const ci=cols.findIndex(c=>/cod.*equip|colh|maq|harv|equip/i.test(c));
-    const pi=cols.findIndex(c=>/peso|ton|weight/i.test(c));
-    const di=cols.findIndex(c=>/^dat|data|date/i.test(c));
-    const oi=cols.findIndex(c=>/oper|motorist|driver/i.test(c));
-    const rc=Object.keys(rows[0]);
-    if(ci>=0){
-      const g={};
-      rows.forEach(r=>{
-        const cod=String(r[rc[ci]]||'').trim();if(!cod)return;
-        if(!g[cod])g[cod]={tons:0,dates:new Set()};
-        if(pi>=0){const v=parseFloat(String(r[rc[pi]]||'').replace(',','.'));if(!isNaN(v))g[cod].tons+=v;}
-        if(di>=0)g[cod].dates.add(String(r[rc[di]]).split(' ')[0]);
+function learnFromData(data) {
+  const today = new Date().toISOString().split('T')[0];
+  for (const [, rows] of Object.entries(data)) {
+    if (!Array.isArray(rows) || !rows.length) continue;
+    const keys = Object.keys(rows[0]);
+    const ci = keys.findIndex(k => /cod.*equip|colh|maq|harv|equip/i.test(k));
+    const pi = keys.findIndex(k => /peso|ton|weight/i.test(k));
+    const di = keys.findIndex(k => /^dat|data|date/i.test(k));
+    const oi = keys.findIndex(k => /oper|motorist|driver/i.test(k));
+    if (ci >= 0) {
+      const g = {};
+      rows.forEach(r => {
+        const cod = String(r[keys[ci]] || '').trim();
+        if (!cod) return;
+        if (!g[cod]) g[cod] = { tons:0, dates:new Set() };
+        if (pi >= 0) { const v = parseFloat(String(r[keys[pi]]||'').replace(',','.')); if(!isNaN(v)) g[cod].tons += v; }
+        if (di >= 0) g[cod].dates.add(String(r[keys[di]]).split(' ')[0]);
       });
-      for(const[cod,info] of Object.entries(g)){
-        if(!brain.domain.machines[cod])brain.domain.machines[cod]={cod,tmd_hist:[],total_ton:0,mentions:0,last_seen:today};
-        const m=brain.domain.machines[cod];
-        m.total_ton=info.tons;m.mentions++;m.last_seen=today;
-        if(info.tons>0&&info.dates.size>0){
-          const tmd=info.tons/info.dates.size;
-          m.tmd_hist=[...m.tmd_hist,{v:+tmd.toFixed(1),d:today}].slice(-30);
-          m.tmd_medio=+(m.tmd_hist.reduce((a,x)=>a+x.v,0)/m.tmd_hist.length).toFixed(1);
+      for (const [cod, info] of Object.entries(g)) {
+        if (!brain.domain.machines[cod])
+          brain.domain.machines[cod] = { cod, tmd_hist:[], total_ton:0, mentions:0, last_seen:today };
+        const m = brain.domain.machines[cod];
+        m.total_ton = info.tons; m.mentions++; m.last_seen = today;
+        if (info.tons > 0 && info.dates.size > 0) {
+          const tmd = info.tons / info.dates.size;
+          m.tmd_hist = [...m.tmd_hist, {v:+tmd.toFixed(1), d:today}].slice(-30);
+          m.tmd_medio = +(m.tmd_hist.reduce((a,x) => a+x.v, 0) / m.tmd_hist.length).toFixed(1);
         }
       }
     }
-    if(oi>=0){
-      rows.forEach(r=>{
-        const op=String(r[rc[oi]]||'').trim();if(!op||op.length<2)return;
-        if(!brain.domain.operators[op])brain.domain.operators[op]={total_ton:0,mentions:0,last_seen:today};
-        brain.domain.operators[op].mentions++;brain.domain.operators[op].last_seen=today;
-        if(pi>=0){const v=parseFloat(String(r[rc[pi]]||'').replace(',','.'));if(!isNaN(v))brain.domain.operators[op].total_ton+=v;}
+    if (oi >= 0) {
+      rows.forEach(r => {
+        const op = String(r[keys[oi]]||'').trim();
+        if (!op || op.length < 2) return;
+        if (!brain.domain.operators[op])
+          brain.domain.operators[op] = { total_ton:0, mentions:0, last_seen:today };
+        brain.domain.operators[op].mentions++;
+        if (pi >= 0) { const v = parseFloat(String(r[keys[pi]]||'').replace(',','.')); if(!isNaN(v)) brain.domain.operators[op].total_ton += v; }
       });
     }
   }
-  genInsights();saveBrain();
+  genInsights(); saveBrain();
 }
 
-function genInsights(){
-  const ms=Object.values(brain.domain.machines).filter(m=>m.tmd_medio>0).sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0));
-  if(!ms.length)return;
-  const avg=ms.reduce((a,m)=>a+(m.tmd_medio||0),0)/ms.length;
-  const below=ms.filter(m=>m.tmd_medio<avg*.8);
-  brain.insights=[
-    {type:'top',text:`Colhedora ${ms[0].cod} lidera com TMD ${ms[0].tmd_medio} t/dia`,ts:iso()},
-    {type:'avg',text:`TMD médio da frota: ${avg.toFixed(1)} t/dia (${ms.length} máquinas)`,ts:iso()},
-    ...(below.length?[{type:'low',text:`${below.length} máquina(s) abaixo de 80% da média`,ts:iso()}]:[])
+function genInsights() {
+  const ms = Object.values(brain.domain.machines)
+    .filter(m => m.tmd_medio > 0).sort((a,b) => (b.tmd_medio||0)-(a.tmd_medio||0));
+  if (!ms.length) return;
+  const avg = ms.reduce((a,m) => a+(m.tmd_medio||0), 0) / ms.length;
+  const below = ms.filter(m => m.tmd_medio < avg * 0.8);
+  brain.insights = [
+    { text:`Colhedora ${ms[0].cod} lidera com TMD ${ms[0].tmd_medio} t/dia` },
+    { text:`TMD médio da frota: ${avg.toFixed(1)} t/dia (${ms.length} máquinas)` },
+    ...(below.length ? [{ text:`${below.length} máquina(s) abaixo de 80% da média` }] : [])
   ];
 }
 
-function learnInteraction(q,a){
+function learnInteraction(q, a) {
   brain.interactions++;
-  const k=q.toLowerCase().replace(/\d+/g,'#').trim().slice(0,80);
-  const ex=brain.frequent_queries.find(x=>x.p===k);
-  if(ex){ex.n++;ex.last=a.slice(0,100);}else brain.frequent_queries.unshift({p:k,n:1,last:a.slice(0,100),ts:iso()});
-  brain.frequent_queries=brain.frequent_queries.sort((a,b)=>b.n-a.n).slice(0,30);
+  const k = q.toLowerCase().replace(/\d+/g,'#').trim().slice(0,80);
+  const ex = brain.frequent_queries.find(x => x.p === k);
+  if (ex) { ex.n++; ex.last = a.slice(0,100); }
+  else brain.frequent_queries.unshift({ p:k, n:1, last:a.slice(0,100) });
+  brain.frequent_queries = brain.frequent_queries.sort((a,b) => b.n-a.n).slice(0,30);
   saveBrain();
 }
 
-function refreshBrainUI(){
-  const el=document.getElementById('brainst');if(!el)return;
-  el.textContent=`Interações: ${brain.interactions}\nMáquinas: ${Object.keys(brain.domain.machines).length}\nInsights: ${brain.insights.length}\nAtualizado: ${brain.updated?.split('T')[0]||'—'}`;
+function refreshBrainUI() {
+  const el = document.getElementById('brainst'); if (!el) return;
+  el.textContent =
+    `Interações: ${brain.interactions}\n` +
+    `Máquinas: ${Object.keys(brain.domain.machines).length}\n` +
+    `Insights: ${brain.insights.length}\n` +
+    `Atualizado: ${(brain.updated||'').split('T')[0]||'—'}`;
 }
-function resetBrain(){if(!confirm('Resetar brain?'))return;localStorage.removeItem(BKEY);brain=loadBrain();saveBrain();}
-function exportBrain(){
-  const b=new Blob([JSON.stringify(brain,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);
-  a.download='kira_brain_'+iso().split('T')[0]+'.json';a.click();URL.revokeObjectURL(a.href);
+function resetBrain() {
+  if (!confirm('Resetar o brain?')) return;
+  localStorage.removeItem(BKEY);
+  location.reload();
+}
+function exportBrain() {
+  const b = new Blob([JSON.stringify(brain,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+  a.download = 'kira_brain_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click(); URL.revokeObjectURL(a.href);
 }
 
-/* ─── WAVEFORM ───────────────────────────────── */
-const wC=document.getElementById('wc'),wX=wC.getContext('2d');
-let wW=0,wH=0,wcx=0,wcy=0,orbR=0;
-const BARS=64,PHS=Array.from({length:64},()=>Math.random()*Math.PI*2);
+/* ══════════════════════════════════════════════
+   WAVEFORM
+══════════════════════════════════════════════ */
+const wC = document.getElementById('wc'), wX = wC.getContext('2d');
+let wW=0, wH=0, wcx=0, wcy=0, orbR=0;
+const BARS=64, PHS=Array.from({length:64}, ()=>Math.random()*Math.PI*2);
 let wt=0;
-const SCOL={idle:[236,72,153],listen:[56,189,248],think:[167,139,250],speak:[45,212,191],error:[255,64,96]};
+const SCOL = { idle:[236,72,153], listen:[56,189,248], think:[167,139,250], speak:[45,212,191] };
 
-function resW(){
-  const s=document.getElementById('stage').getBoundingClientRect();
-  const d=window.devicePixelRatio||1;
-  wC.width=s.width*d;wC.height=s.height*d;
-  wC.style.width=s.width+'px';wC.style.height=s.height+'px';
-  wX.setTransform(1,0,0,1,0,0);wX.scale(d,d);
-  wW=s.width;wH=s.height;wcx=wW/2;wcy=wH/2;
-  orbR=document.getElementById('orb').getBoundingClientRect().width/2+16;
+function resW() {
+  const s = document.getElementById('stage').getBoundingClientRect();
+  const d = window.devicePixelRatio||1;
+  wC.width=s.width*d; wC.height=s.height*d;
+  wC.style.width=s.width+'px'; wC.style.height=s.height+'px';
+  wX.setTransform(1,0,0,1,0,0); wX.scale(d,d);
+  wW=s.width; wH=s.height; wcx=wW/2; wcy=wH/2;
+  orbR = document.getElementById('orb').getBoundingClientRect().width/2+16;
 }
-window.addEventListener('resize',resW);
+window.addEventListener('resize', resW);
 
-function drawW(){
+function drawW() {
   requestAnimationFrame(drawW);
-  if(!wW){resW();return;}
-  wX.clearRect(0,0,wW,wH);wt+=.022;
-  const fft=new Uint8Array(analyser?analyser.frequencyBinCount:0);
-  if(analyser)analyser.getByteFrequencyData(fft);
-  const[r,g,b]=SCOL[curState]||SCOL.idle;
-  for(let i=0;i<BARS;i++){
-    const ang=(i/BARS)*Math.PI*2-Math.PI/2;
-    let amp=0;
-    switch(curState){
-      case'listen':if(analyser){const x=Math.floor((i/BARS)*fft.length*.65);amp=(fft[x]/255)*50;}break;
-      case'speak': amp=5+Math.abs(Math.sin(wt*2.5+PHS[i]+i*.2))*28+Math.abs(Math.sin(wt*5+i*.45))*13;break;
-      case'think': amp=3+Math.abs(Math.sin(wt*1.5+PHS[i]+i*.15))*18+Math.abs(Math.sin(wt*3.5+i*.3))*7;break;
-      default:     amp=1.5+Math.abs(Math.sin(wt*.6+PHS[i]+i*.05))*4;
+  if (!wW) { resW(); return; }
+  wX.clearRect(0,0,wW,wH); wt+=.022;
+  const fft = new Uint8Array(analyser ? analyser.frequencyBinCount : 0);
+  if (analyser) analyser.getByteFrequencyData(fft);
+  const [r,g,b] = SCOL[curState] || SCOL.idle;
+  for (let i=0; i<BARS; i++) {
+    const ang = (i/BARS)*Math.PI*2 - Math.PI/2;
+    let amp = 0;
+    switch(curState) {
+      case 'listen': if(analyser){const x=Math.floor((i/BARS)*fft.length*.65);amp=(fft[x]/255)*50;}break;
+      case 'speak':  amp=5+Math.abs(Math.sin(wt*2.5+PHS[i]+i*.2))*28+Math.abs(Math.sin(wt*5+i*.45))*13;break;
+      case 'think':  amp=3+Math.abs(Math.sin(wt*1.5+PHS[i]+i*.15))*18+Math.abs(Math.sin(wt*3.5+i*.3))*7;break;
+      default:       amp=1.5+Math.abs(Math.sin(wt*.6+PHS[i]+i*.05))*4;
     }
-    const ir=orbR+3,or2=orbR+3+Math.max(1.5,amp);
+    const ir=orbR+3, or2=orbR+3+Math.max(1.5,amp);
     wX.strokeStyle=`rgba(${r},${g},${b},${curState==='idle'?.22:.58})`;
-    wX.lineWidth=curState==='idle'?1:1.6;wX.lineCap='round';
+    wX.lineWidth=curState==='idle'?1:1.6; wX.lineCap='round';
     wX.beginPath();
-    wX.moveTo(wcx+Math.cos(ang)*ir,wcy+Math.sin(ang)*ir);
-    wX.lineTo(wcx+Math.cos(ang)*or2,wcy+Math.sin(ang)*or2);
+    wX.moveTo(wcx+Math.cos(ang)*ir, wcy+Math.sin(ang)*ir);
+    wX.lineTo(wcx+Math.cos(ang)*or2, wcy+Math.sin(ang)*or2);
     wX.stroke();
   }
   const g2=wX.createRadialGradient(wcx,wcy,orbR-8,wcx,wcy,orbR+9);
   g2.addColorStop(0,`rgba(${r},${g},${b},.12)`);g2.addColorStop(1,`rgba(${r},${g},${b},0)`);
-  wX.fillStyle=g2;wX.beginPath();wX.arc(wcx,wcy,orbR+9,0,Math.PI*2);wX.fill();
+  wX.fillStyle=g2; wX.beginPath(); wX.arc(wcx,wcy,orbR+9,0,Math.PI*2); wX.fill();
 }
 requestAnimationFrame(drawW);
 
-/* ─── ESTADO VISUAL ──────────────────────────── */
-const SLBL={idle:'AGUARDANDO',listen:'OUVINDO',think:'PROCESSANDO',speak:'FALANDO',error:'ERRO'};
-function setState(s){
+/* ══════════════════════════════════════════════
+   ESTADO VISUAL
+══════════════════════════════════════════════ */
+const SLBL = { idle:'AGUARDANDO', listen:'OUVINDO', think:'PROCESSANDO', speak:'FALANDO' };
+function setState(s) {
   curState=s;
-  const cls={idle:'',listen:'s-listen',think:'s-think',speak:'s-speak',error:'s-error'};
-  document.body.className=cls[s]||'';
-  document.getElementById('slbl').textContent=SLBL[s]||'AGUARDANDO';
+  const cls = { idle:'', listen:'sl', think:'st', speak:'ss' };
+  document.body.className = cls[s]||'';
+  document.getElementById('slbl').textContent = SLBL[s]||'AGUARDANDO';
 }
-function setSub(t,keep=false){
+function setSub(t, keep=false) {
   const el=document.getElementById('sub');
-  if(!t){el.style.opacity='0';return;}
-  el.textContent=t;el.style.opacity='1';
+  if (!t) { el.style.opacity='0'; return; }
+  el.textContent=t; el.style.opacity='1';
   clearTimeout(el._t);
-  if(!keep)el._t=setTimeout(()=>{el.style.opacity='0';},8000);
+  if (!keep) el._t=setTimeout(()=>{el.style.opacity='0';}, 7000);
 }
-function setBoot(msg,pct){
-  const m=document.getElementById('bm'),b=document.getElementById('bpb'),r=document.getElementById('rf2');
-  if(m)m.textContent=msg;
-  if(b)b.style.width=pct+'%';
-  if(r)r.style.strokeDashoffset=(440*(1-pct/100)).toFixed(1);
-}
-function closeBoot(){
-  const b=document.getElementById('boot');
-  b.classList.add('out');setTimeout(()=>b.classList.add('gone'),600);
+function setInit(msg, pct) {
+  const m=document.getElementById('imsg'), b=document.getElementById('ipb'), r=document.getElementById('irf');
+  if (m) m.textContent=msg;
+  if (b) b.style.width=pct+'%';
+  if (r) r.style.strokeDashoffset=(440*(1-pct/100)).toFixed(1);
 }
 
-/* ─── MIC PERMISSION SHEET ───────────────────── */
-function openMicSheet(){
-  const sheet=document.getElementById('mic-sheet');
+/* ══════════════════════════════════════════════
+   FIREBASE — inicia automático ao abrir a página
+══════════════════════════════════════════════ */
+function startFirebase() {
+  setInit('Aguardando Firebase SDK…', 8);
 
-  if(IS_FILE){
-    /* file:// — mostra guia de servidor local */
-    document.getElementById('ms-body').innerHTML=
-      '<b>Chrome bloqueia o microfone</b> quando o arquivo<br>'+
-      'é aberto direto (file://). Rode via <b>localhost</b>:';
-    document.getElementById('ms-btns').style.display='none';
-    document.getElementById('ms-guide').style.display='block';
-    /* detecta OS */
-    const ua=navigator.userAgent.toLowerCase();
-    if(!ua.includes('win'))showTab('mac',document.querySelector('.gtab:nth-child(2)'));
-  }
-
-  setTimeout(()=>sheet.classList.add('up'),300);
-}
-
-function closeMicSheet(){
-  document.getElementById('mic-sheet').classList.remove('up');
-}
-
-/* ─── PERMITIR MIC ───────────────────────────── */
-async function allowMic(){
-  const btn=document.getElementById('ms-allow-btn');
-  const errEl=document.getElementById('ms-err');
-  errEl.style.display='none';
-  btn.textContent='⏳ Aguardando…';
-  btn.style.opacity='.6';btn.style.pointerEvents='none';
-
-  try{
-    micStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
-    micGranted=true;
-    try{
-      if(!audioCtx||audioCtx.state==='closed'){
-        audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-      }
-      if(audioCtx.state==='suspended')await audioCtx.resume();
-      analyser=audioCtx.createAnalyser();
-      analyser.fftSize=256;analyser.smoothingTimeConstant=.76;
-      audioCtx.createMediaStreamSource(micStream).connect(analyser);
-    }catch(e){console.warn('[K] WebAudio:',e);}
-    closeMicSheet();
-    addLog('Microfone autorizado','sys');
-    setSub('Microfone ativo. Pode falar!');
-    setTimeout(()=>setSub(''),3000);
-    if(isHF&&dbReady&&!isBusy)startRec();
-  }catch(err){
-    console.error('[K] mic:',err.name);
-    btn.textContent='🎤 TENTAR NOVAMENTE';
-    btn.style.opacity='1';btn.style.pointerEvents='all';
-    let msg='';
-    if(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'){
-      msg='<b>Permissão negada.</b><br>'+
-          '1. Clique em 🔒 na barra de endereço<br>'+
-          '2. Mude Microfone para <b>Permitir</b><br>'+
-          '3. Recarregue (F5)';
-    }else if(err.name==='NotFoundError'){
-      msg='Nenhum microfone encontrado.';
-    }else{
-      msg=err.name+': '+err.message;
-    }
-    errEl.innerHTML=msg;errEl.style.display='block';
-  }
-}
-
-/* Sem voz — continua só com texto */
-function skipMic(){
-  closeMicSheet();
-  addLog('Modo sem microfone ativo','sys');
-  setSub('Modo sem voz. Use o orb para digitar.');
-  setTimeout(()=>setSub(''),3500);
-}
-
-/* ─── GUIDE TABS ─────────────────────────────── */
-function showTab(id,el){
-  document.querySelectorAll('.gtab-c').forEach(t=>t.classList.remove('show'));
-  document.querySelectorAll('.gtab').forEach(t=>t.classList.remove('act'));
-  const tc=document.getElementById('tc-'+id);
-  if(tc)tc.classList.add('show');
-  if(el)el.classList.add('act');
-}
-function copyCmd(el){
-  const code=el.querySelector('code')?.textContent||'';
-  navigator.clipboard?.writeText(code).then(()=>{
-    el.classList.add('copied');setTimeout(()=>el.classList.remove('copied'),2000);
-  }).catch(()=>{
-    const ta=document.createElement('textarea');ta.value=code;
-    document.body.appendChild(ta);ta.select();
-    document.execCommand('copy');document.body.removeChild(ta);
-    el.classList.add('copied');setTimeout(()=>el.classList.remove('copied'),2000);
-  });
-}
-
-/* ─── FIREBASE ───────────────────────────────── */
-function initFirebase(){
-  setBoot('Conectando Firebase…',15);
-  let attempts=80; /* 80×250ms = 20s */
-  function poll(){
-    if(typeof firebase!=='undefined'&&typeof firebase.initializeApp==='function'){
+  /* Poll até firebase estar disponível (scripts carregam como tags) */
+  let tries = 60; /* 60×250ms = 15s */
+  function poll() {
+    if (typeof firebase !== 'undefined' && typeof firebase.initializeApp === 'function') {
       doInit();
-    }else if(attempts-->0){
-      setTimeout(poll,250);
-    }else{
-      setBoot('Firebase indisponível — modo offline',100);
-      setTimeout(()=>{dbReady=true;finishBoot();},600);
+    } else if (tries-- > 0) {
+      setTimeout(poll, 250);
+    } else {
+      setInit('Firebase indisponível — dados locais apenas', 100);
+      setTimeout(readyToStart, 500);
     }
   }
-  function doInit(){
-    try{
-      if(!firebase.apps||firebase.apps.length===0)firebase.initializeApp(FB_CFG);
-      db=firebase.firestore();
-      setBoot('Firebase OK. Autenticando…',20);
+
+  function doInit() {
+    try {
+      if (!firebase.apps || firebase.apps.length === 0) firebase.initializeApp(FB_CFG);
+      db = firebase.firestore();
+      setInit('Firebase OK. Autenticando…', 18);
       document.getElementById('cnd').classList.add('ok');
-      document.getElementById('cnt').textContent='ONLINE';
+      document.getElementById('cnt').textContent = 'ONLINE';
       firebase.auth().signInAnonymously()
-        .then(()=>{setBoot('Carregando tabelas…',30);loadAllData();})
-        .catch(e=>{console.warn('[K] auth:',e.code);loadAllData();});
-    }catch(e){
-      console.error('[K] Firebase doInit:',e.message);
-      setBoot('Firebase erro — offline',100);
-      setTimeout(()=>{dbReady=true;finishBoot();},600);
+        .then(() => { setInit('Carregando tabelas…', 28); loadData(); })
+        .catch(e => { console.warn('[K] auth:', e.code); loadData(); });
+    } catch(e) {
+      console.error('[K] Firebase init:', e.message);
+      setInit('Erro Firebase — continuando', 100);
+      setTimeout(readyToStart, 500);
     }
   }
+
   poll();
-  setTimeout(()=>{if(!dbReady){setBoot('Timeout — continuando',100);dbReady=true;finishBoot();}},22000);
+  setTimeout(() => { if (!dbReady) { setInit('Timeout — continuando', 100); readyToStart(); } }, 20000);
 }
 
-function parseFBDoc(doc){
-  try{
-    if(!doc.exists)return[];
-    const d=doc.data();
-    if(d.payload){const{cab,rows}=JSON.parse(d.payload);return rows.map(r=>Object.fromEntries(cab.map((c,i)=>[c,r[i]??''])));}
-    if(d.rows&&d.columns)return d.rows.map(r=>Object.fromEntries(d.columns.map((c,i)=>[c,r[i]??''])));
-    if(Array.isArray(d.data))return d.data;
-    return[d];
-  }catch(e){return[];}
+function parseFBDoc(doc) {
+  try {
+    if (!doc.exists) return [];
+    const d = doc.data();
+    if (d.payload) { const {cab,rows}=JSON.parse(d.payload); return rows.map(r=>Object.fromEntries(cab.map((c,i)=>[c,r[i]??'']))); }
+    if (d.rows && d.columns) return d.rows.map(r=>Object.fromEntries(d.columns.map((c,i)=>[c,r[i]??''])));
+    if (Array.isArray(d.data)) return d.data;
+    return [d];
+  } catch(e) { return []; }
 }
 
-function loadAllData(){
-  if(!db){setTimeout(()=>{dbReady=true;finishBoot();},200);return;}
-  let done=0,total=1;
-  function tick(name,count){
+function loadData() {
+  if (!db) { readyToStart(); return; }
+  let done=0, total=1;
+
+  function tick(name, count) {
     done++;
-    const pct=30+Math.min(58,Math.floor((done/Math.max(total,1))*58));
-    setBoot('Tabela '+name+' ('+count+' reg)…',pct);
+    const pct = 28 + Math.min(58, Math.floor((done/Math.max(total,1))*58));
+    setInit(`${name}: ${count} reg`, pct);
     updateDBCount();
   }
-  db.collection('snapshots').onSnapshot(
-    snap=>{
-      total=Math.max(total,snap.size||1);
-      snap.forEach(doc=>{
-        const rows=parseFBDoc(doc);
-        if(rows.length){dbData[doc.id]=rows;tick(doc.id,rows.length);addLog('snapshots/'+doc.id+': '+rows.length,'sys');}
-      });
-      if(!dbReady)checkDone();
-    },
-    err=>{
-      console.warn('[K] snapshots:',err.code);
-      const NAMES=['producao','acmSafra','metas','colheita','patio','pesagem',
+
+  /* Toda a coleção snapshots */
+  db.collection('snapshots').onSnapshot(snap => {
+    total = Math.max(total, snap.size || 1);
+    snap.forEach(doc => {
+      const rows = parseFBDoc(doc);
+      if (rows.length) { dbData[doc.id]=rows; tick(doc.id, rows.length); addLog('snapshots/'+doc.id+': '+rows.length,'sys'); }
+    });
+    if (!dbReady) checkDone();
+  }, err => {
+    console.warn('[K] snapshots:', err.code);
+    /* Fallback individual */
+    const NAMES = ['producao','acmSafra','metas','colheita','patio','pesagem',
                    'transporte','frentes','operadores','equipamentos','diario','turno'];
-      total=NAMES.length;
-      NAMES.forEach(n=>{
-        db.collection('snapshots').doc(n).onSnapshot(
-          doc=>{if(doc.exists){dbData[n]=parseFBDoc(doc);tick(n,dbData[n].length);}else{done++;}checkDone();},
-          ()=>{done++;checkDone();}
-        );
-      });
-    }
-  );
+    total = NAMES.length;
+    NAMES.forEach(n => {
+      db.collection('snapshots').doc(n).onSnapshot(
+        doc => { if(doc.exists){dbData[n]=parseFBDoc(doc);tick(n,dbData[n].length);}else done++; checkDone(); },
+        () => { done++; checkDone(); }
+      );
+    });
+  });
+
   /* Coleções raiz */
   ['viagens','producao','colheita','patio','pesagens','frentes','equipamentos',
-   'operadores','metas','turnos','diario','controle','acmSafra'].forEach(col=>{
+   'operadores','metas','turnos','diario','controle','acmSafra'].forEach(col => {
     db.collection(col).limit(800).onSnapshot(
-      s=>{if(!s.empty){dbData['_'+col]=s.docs.map(d=>({_id:d.id,...d.data()}));updateDBCount();}},()=>{});
+      s => { if(!s.empty){dbData['_'+col]=s.docs.map(d=>({_id:d.id,...d.data()}));updateDBCount();} }, ()=>{}
+    );
   });
-  function checkDone(){if(done>=total&&!dbReady)finishData();}
-  setTimeout(()=>{if(!dbReady)finishData();},12000);
-  function finishData(){
-    const tot=Object.values(dbData).flat().length;
-    setBoot('✓ '+tot.toLocaleString('pt-BR')+' reg. Aprendendo…',92);
-    learnFromData(dbData);updateDBCount();
-    setTimeout(()=>{dbReady=true;finishBoot();},500);
+
+  function checkDone() { if (done>=total && !dbReady) finishData(); }
+  setTimeout(() => { if (!dbReady) finishData(); }, 12000);
+
+  function finishData() {
+    const tot = Object.values(dbData).flat().length;
+    setInit(`✓ ${tot.toLocaleString('pt-BR')} registros. Aprendendo…`, 92);
+    learnFromData(dbData); updateDBCount();
+    setTimeout(readyToStart, 500);
   }
 }
 
-function updateDBCount(){
-  const tot=Object.values(dbData).flat().length;
-  const el=document.getElementById('dbi');if(el)el.textContent='DB: '+tot.toLocaleString('pt-BR')+' reg';
+function updateDBCount() {
+  const tot = Object.values(dbData).flat().length;
+  const el = document.getElementById('dbi'); if(el) el.textContent='DB: '+tot.toLocaleString('pt-BR')+' reg';
   refreshCfgDB();
 }
-function refreshCfgDB(){
-  const el=document.getElementById('cfg-db');if(!el)return;
-  const lines=Object.entries(dbData).filter(([,v])=>Array.isArray(v)&&v.length>0)
-    .map(([k,v])=>k.replace(/^_/,'')+': '+v.length.toLocaleString('pt-BR')+' reg').join('\n');
-  el.textContent=lines||'Sem dados';
+function refreshCfgDB() {
+  const el = document.getElementById('cfg-db'); if(!el) return;
+  el.textContent = Object.entries(dbData)
+    .filter(([,v])=>Array.isArray(v)&&v.length>0)
+    .map(([k,v])=>k.replace(/^_/,'')+': '+v.length.toLocaleString('pt-BR')+' reg')
+    .join('\n') || 'Sem dados';
 }
-function reloadDB(){dbData={};if(db)loadAllData();}
+function reloadDB() { dbData={}; if(db) loadData(); }
 
-async function finishBoot(){
-  setBoot('Kira pronta.',100);
-  await new Promise(r=>setTimeout(r,500));
-  closeBoot();
-  await waitVoices();
-
-  const h=new Date().getHours();
-  const sd=h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
-  const tot=Object.values(dbData).flat().length;
-  const mc=Object.keys(brain.domain.machines).length;
-  const greet=`${sd}. Kira online. ${tot>0?'Analisei '+tot.toLocaleString('pt-BR')+' registros.':'Sem dados Firebase.'} ${mc>0?'Aprendi '+mc+' máquinas.':''} ${micGranted?'Pode falar.':'Toque no orb ou permita o microfone para usar voz.'}`;
-
-  setState('speak');setSub(greet,true);
-  addChat('kira',greet);
-  await speak(greet);
-  setState('idle');setSub('');
-
-  if(isHF&&micGranted)startRec();
+/* Dados prontos — mostra botão de iniciar */
+function readyToStart() {
+  if (dbReady) return;
+  dbReady = true;
+  setInit('Pronto. Toque para iniciar.', 100);
+  document.getElementById('init-btn').classList.add('show');
 }
 
-/* ─── GRAVAÇÃO ───────────────────────────────── */
-const SILENCE_MS=900,SILENCE_DB=-44;
-function getSupportedMime(){
-  const m=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
-  return m.find(x=>MediaRecorder.isTypeSupported(x))||'';
+/* ══════════════════════════════════════════════
+   HANDSHAKE — único clique que pede mic
+   Só acontece UMA VEZ, depois da tela de boot
+══════════════════════════════════════════════ */
+async function handshake() {
+  const btn  = document.getElementById('init-btn');
+  const errEl = document.getElementById('ierr');
+
+  btn.textContent = '⏳ Aguardando…';
+  btn.style.opacity = '.5';
+  btn.style.pointerEvents = 'none';
+  errEl.style.display = 'none';
+
+  try {
+    /* Pede microfone UMA VEZ aqui — nunca mais */
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+
+    /* Web Audio para visualização */
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 256; analyser.smoothingTimeConstant = .76;
+    audioCtx.createMediaStreamSource(micStream).connect(analyser);
+
+    /* Fecha tela de init */
+    const init = document.getElementById('init');
+    init.classList.add('out');
+    setTimeout(() => { init.classList.add('gone'); resW(); }, 700);
+
+    /* Espera vozes e faz saudação */
+    await waitVoices();
+    const h = new Date().getHours();
+    const sd = h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+    const tot = Object.values(dbData).flat().length;
+    const mc  = Object.keys(brain.domain.machines).length;
+    const greet =
+      `${sd}! Kira operacional. ` +
+      (tot>0 ? `Analisei ${tot.toLocaleString('pt-BR')} registros e aprendi ${mc} máquinas. ` : '') +
+      'Pode falar.';
+
+    setState('speak'); setSub(greet, true);
+    addChat('kira', greet);
+    await speak(greet);
+    setState('idle'); setSub('');
+
+    /* Inicia modo mãos livres se ligado */
+    if (continuousMode) startRec();
+
+  } catch(err) {
+    console.error('[K] handshake:', err.name, err.message);
+    btn.textContent = '🎙 TENTAR NOVAMENTE';
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'all';
+
+    let msg = '';
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      msg = '❌ Permissão negada.<br>Clique em 🔒 na barra do browser → Microfone → Permitir → Recarregue (F5).';
+    } else if (err.name === 'NotFoundError') {
+      msg = '❌ Nenhum microfone encontrado neste dispositivo.';
+    } else {
+      msg = '❌ ' + err.name + ': ' + err.message;
+    }
+    errEl.innerHTML = msg; errEl.style.display = 'block';
+  }
 }
-function startRec(){
-  if(isBusy||isRec||!micStream||!micGranted)return;
-  if(audioCtx?.state==='suspended')audioCtx.resume();
-  recChunks=[];isRec=true;recStart=Date.now();silStart=null;
-  clearTimeout(silCheckId);
-  recorder=new MediaRecorder(micStream,{mimeType:getSupportedMime()});
-  recorder.ondataavailable=e=>{if(e.data.size>0)recChunks.push(e.data);};
-  recorder.start(100);
-  setState('listen');addLog('Gravando…','sys');
-  if(isHF){
-    silCheckId=setInterval(()=>{
-      if(!isRec||!analyser)return;
-      const buf=new Uint8Array(analyser.frequencyBinCount);
+
+/* ══════════════════════════════════════════════
+   GRAVAÇÃO — MediaRecorder + Whisper
+   Microfone é desligado enquanto KIRA fala/pensa
+══════════════════════════════════════════════ */
+function getSupportedMime() {
+  const mimes = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  return mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+}
+
+function startRec() {
+  if (!micStream || isRecording || isThinking || isSpeaking) return;
+  if (audioCtx?.state === 'suspended') audioCtx.resume();
+
+  /* Garante que mic está ligado */
+  micStream.getAudioTracks().forEach(t => { t.enabled = true; });
+
+  audioChunks = []; recStart = Date.now(); silenceStart = null;
+  isRecording = true;
+
+  recorder = new MediaRecorder(micStream, { mimeType: getSupportedMime() });
+  recorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+  recorder.start(200);
+  setState('listen');
+  addLog('Gravando…','sys');
+
+  /* Detecção de silêncio em modo mãos livres */
+  if (continuousMode) {
+    clearInterval(silCheckId);
+    silCheckId = setInterval(() => {
+      if (!isRecording || !analyser) return;
+      const buf = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(buf);
-      const avg=buf.reduce((a,v)=>a+v,0)/buf.length;
-      const db=20*Math.log10(avg/255+1e-6);
-      if(db<SILENCE_DB){
-        if(!silStart)silStart=Date.now();
-        if(Date.now()-silStart>SILENCE_MS){clearInterval(silCheckId);
-          if(Date.now()-recStart>400)stopRec();
-          else{isRec=false;try{recorder.stop();}catch(e){}if(!isBusy)setTimeout(startRec,500);}
+      const avg = buf.reduce((a,v)=>a+v,0) / buf.length;
+      const db  = 20 * Math.log10(avg/255 + 1e-6);
+      if (db < -44) {
+        if (!silenceStart) silenceStart = Date.now();
+        if (Date.now()-silenceStart > 900 && Date.now()-recStart > 500) {
+          clearInterval(silCheckId);
+          stopRec();
         }
-      }else silStart=null;
-    },80);
+      } else { silenceStart = null; }
+    }, 80);
   }
-}
-function stopRec(){
-  if(!isRec)return;isRec=false;clearInterval(silCheckId);
-  if(recorder&&recorder.state==='recording'){recorder.onstop=processAudio;recorder.stop();}
-}
-async function processAudio(){
-  if(isBusy)return;
-  const blob=new Blob(recChunks,{type:getSupportedMime()||'audio/webm'});
-  if(blob.size<800||Date.now()-recStart<300){if(isHF&&!isBusy)setTimeout(startRec,600);return;}
-  isBusy=true;setState('think');setSub('…');
-  micStream?.getAudioTracks().forEach(t=>{t.enabled=false;}); /* desativa mic durante processo */
-  try{
-    const form=new FormData();
-    form.append('file',blob,'audio.webm');
-    form.append('model','whisper-large-v3-turbo');
-    form.append('language','pt');
-    form.append('response_format','json');
-    const wRes=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{
-      method:'POST',headers:{'Authorization':'Bearer '+GROQ},body:form
-    });
-    if(!wRes.ok)throw new Error('Whisper '+wRes.status);
-    const texto=((await wRes.json()).text||'').trim();
-    if(!texto||texto.length<2){resetBusy();return;}
-    addLog(texto,'user');addChat('user',texto);setSub('"'+texto+'"');
-    const resp=await askGroq(texto);
-    const clean=parseCards(resp);
-    addLog(clean,'kira');addChat('kira',clean);
-    learnInteraction(texto,clean);
-    setState('speak');setSub(clean,true);
-    await speak(clean);
-    setState('idle');setSub('');
-  }catch(err){
-    console.error('[K]',err);addLog('Erro: '+err.message,'err');
-    setState('idle');
-  }
-  resetBusy();
-}
-function resetBusy(){
-  isBusy=false;
-  micStream?.getAudioTracks().forEach(t=>{t.enabled=true;});
-  if(isHF&&micGranted)setTimeout(startRec,700);
 }
 
-/* ─── GROQ LLM ───────────────────────────────── */
-async function askGroq(query){
-  const ctx=buildCtx(query);
-  const topM=Object.values(brain.domain.machines)
+function stopRec() {
+  if (!isRecording) return;
+  isRecording = false;
+  clearInterval(silCheckId);
+  if (recorder && recorder.state === 'recording') {
+    recorder.onstop = processAudio;
+    recorder.stop();
+  }
+}
+
+async function processAudio() {
+  if (isThinking || isSpeaking) return;
+
+  const blob = new Blob(audioChunks, { type: getSupportedMime() || 'audio/webm' });
+  if (blob.size < 1000 || Date.now()-recStart < 400) {
+    if (continuousMode && !isThinking && !isSpeaking) setTimeout(startRec, 600);
+    return;
+  }
+
+  isThinking = true;
+  /* Desliga mic durante processamento — evita capturar eco/ruído */
+  micStream.getAudioTracks().forEach(t => { t.enabled = false; });
+  setState('think'); setSub('…');
+
+  try {
+    /* 1. Transcrição Whisper */
+    const form = new FormData();
+    form.append('file', blob, 'audio.webm');
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('language', 'pt');
+    form.append('response_format', 'json');
+
+    const wRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method:'POST', headers:{'Authorization':'Bearer '+GROQ}, body:form
+    });
+    if (!wRes.ok) throw new Error('Whisper HTTP ' + wRes.status);
+    const wData = await wRes.json();
+    const texto = (wData.text||'').trim();
+
+    if (!texto || texto.length < 2) {
+      resetState(); return;
+    }
+
+    addLog(texto, 'user'); addChat('user', texto); setSub('"'+texto+'"');
+
+    /* 2. LLM */
+    const resp = await askGroq(texto);
+    const clean = parseCards(resp);
+    addLog(clean, 'kira'); addChat('kira', clean);
+    learnInteraction(texto, clean);
+
+    /* 3. Fala */
+    isThinking = false; isSpeaking = true;
+    setState('speak'); setSub(clean, true);
+    await speak(clean);
+
+  } catch(err) {
+    console.error('[K] processAudio:', err.message);
+    addLog('Erro: '+err.message, 'err');
+  }
+
+  resetState();
+}
+
+function resetState() {
+  isThinking = false; isSpeaking = false;
+  /* Religa microfone */
+  if (micStream) micStream.getAudioTracks().forEach(t => { t.enabled = true; });
+  setState('idle'); setSub('');
+  if (continuousMode) setTimeout(startRec, 600);
+}
+
+/* ══════════════════════════════════════════════
+   ORB TAP — toggle gravação
+══════════════════════════════════════════════ */
+function orbClick() {
+  if (!micStream) return; /* Ainda na tela de init */
+  if (isThinking || isSpeaking) return;
+  if (isRecording) stopRec();
+  else startRec();
+}
+
+function toggleHF() {
+  continuousMode = document.getElementById('hft').checked;
+  if (!micStream) { document.getElementById('hft').checked=false; continuousMode=false; return; }
+  if (continuousMode && !isRecording && !isThinking && !isSpeaking) startRec();
+  else if (!continuousMode && isRecording) stopRec();
+}
+
+/* ══════════════════════════════════════════════
+   GROQ LLM
+══════════════════════════════════════════════ */
+async function askGroq(query) {
+  const ctx = buildCtx(query);
+  const topM = Object.values(brain.domain.machines)
     .sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0)).slice(0,5)
-    .map(m=>`${m.cod}: TMD=${m.tmd_medio||'?'} t/dia`).join('\n');
-  const insStr=brain.insights.slice(0,4).map(i=>'• '+i.text).join('\n');
-  const sys=`Você é Kira, assistente de análise agrícola da AgroAnalytics, Usina Pitangueiras.
+    .map(m=>`${m.cod}: TMD=${m.tmd_medio||'?'} t/dia, total=${(m.total_ton||0).toFixed(0)} t`).join('\n');
+  const insStr = brain.insights.slice(0,4).map(i=>'• '+i.text).join('\n');
+
+  const sys =
+`Você é Kira, assistente de análise agrícola da AgroAnalytics, Usina Pitangueiras.
 
 PERSONALIDADE:
 - Direta, precisa, como colega de confiança
-- Respostas curtas para perguntas simples (máx 15 palavras faladas)
-- Análises detalhadas quando necessário
-- Sem "Com certeza!", vai direto ao ponto
+- Resposta curta para pergunta simples (máx 15 palavras faladas)
+- Detalhada quando pedirem análise
+- Sem "Com certeza!" ou papo furado — vai direto
 - Para voz: sem markdown, sem asteriscos, linguagem oral
-- Use {{CARD:TÍTULO|VALOR|UNIDADE}} para métricas chave
+- Use {{CARD:TÍTULO|VALOR|UNIDADE}} para métricas importantes
 
 DOMÍNIO:
-- TMD = Toneladas por Máquina por Dia = total_ton ÷ dias_únicos
+- TMD = Toneladas por Máquina por Dia = total_toneladas ÷ dias_únicos_de_operação
 - TMS = Toneladas Métricas de Sacarose
 - TCH = Toneladas de Cana por Hectare
 - ATR = Açúcar Total Recuperável
+- Disponibilidade mecânica = % do tempo operando
 
-BRAIN INSIGHTS:
-${insStr||'Aprendendo…'}
+BRAIN (aprendizado acumulado):
+${insStr || 'Ainda aprendendo.'}
 TOP MÁQUINAS:
-${topM||'Sem dados'}
+${topM || 'Sem dados suficientes ainda.'}
 
-DADOS FIREBASE (${Object.keys(dbData).length} tabelas):
+DADOS FIREBASE (${Object.keys(dbData).length} tabelas disponíveis):
 ${ctx}
-HORA: ${new Date().toLocaleString('pt-BR')}`;
 
-  const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+HORA ATUAL: ${new Date().toLocaleString('pt-BR')}
+
+COMO ANALISAR:
+- "Qual colhedora mais colheu?" → agrupe por código de equipamento, some toneladas, retorne o maior
+- "TMD de tal máquina?" → some toneladas dela ÷ dias únicos que operou
+- "Resultado de tal data?" → filtre registros por essa data
+- Use SEMPRE os números reais dos dados acima, nunca invente`;
+
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method:'POST',
     headers:{'Authorization':'Bearer '+GROQ,'Content-Type':'application/json'},
-    body:JSON.stringify({
+    body: JSON.stringify({
       model:'llama-3.3-70b-versatile',
       messages:[{role:'system',content:sys},...chatHist.slice(-8),{role:'user',content:query}],
-      max_tokens:500,temperature:.72
+      max_tokens:500, temperature:.72
     })
   });
-  if(!r.ok)throw new Error('Groq '+r.status);
-  const ans=(await r.json()).choices[0].message.content;
+  if (!r.ok) throw new Error('Groq HTTP ' + r.status);
+  const ans = (await r.json()).choices[0].message.content;
   chatHist.push({role:'user',content:query},{role:'assistant',content:ans});
-  if(chatHist.length>20)chatHist=chatHist.slice(-20);
-  try{localStorage.setItem(HKEY,JSON.stringify(chatHist));}catch(e){}
+  if (chatHist.length > 20) chatHist = chatHist.slice(-20);
+  try { localStorage.setItem(HKEY, JSON.stringify(chatHist)); } catch(e) {}
   return ans;
 }
-function buildCtx(query){
-  const ql=query.toLowerCase();
-  const pri=[];
-  if(/colh|harv|maq|equip|tmd/i.test(ql))pri.push('producao','colheita','_producao','_colheita');
-  if(/safra|acm|acumul/i.test(ql))pri.push('acmSafra');
-  if(/meta|objetivo/i.test(ql))pri.push('metas');
-  if(/pati|recep/i.test(ql))pri.push('patio','_patio');
-  if(/oper|motorist/i.test(ql))pri.push('operadores','_operadores');
-  const ctx={};const added=new Set();
-  for(const k of pri){if(dbData[k]?.length){ctx[k]={total:dbData[k].length,dados:dbData[k].slice(0,300)};added.add(k);}}
-  for(const[k,v]of Object.entries(dbData)){
-    if(added.has(k)||!Array.isArray(v)||!v.length)continue;
+
+function buildCtx(query) {
+  const ql = query.toLowerCase();
+  const pri = [];
+  if (/colh|harv|maq|equip|tmd/i.test(ql)) pri.push('producao','colheita','_producao','_colheita');
+  if (/safra|acm|acumul/i.test(ql))        pri.push('acmSafra');
+  if (/meta|objetivo/i.test(ql))           pri.push('metas');
+  if (/pati|recep/i.test(ql))              pri.push('patio','_patio');
+  if (/oper|motorist/i.test(ql))           pri.push('operadores','_operadores');
+  const ctx={}, added=new Set();
+  for (const k of pri) {
+    if (dbData[k]?.length) { ctx[k]={total:dbData[k].length,dados:dbData[k].slice(0,300)}; added.add(k); }
+  }
+  for (const [k,v] of Object.entries(dbData)) {
+    if (added.has(k)||!Array.isArray(v)||!v.length) continue;
     ctx[k]={total:v.length,amostra:v.slice(0,30),colunas:Object.keys(v[0]||{})};
   }
   return JSON.stringify(ctx);
 }
 
-/* ─── TTS ────────────────────────────────────── */
-function waitVoices(){
-  return new Promise(res=>{
-    if(!window.speechSynthesis){res();return;}
-    if(window.speechSynthesis.getVoices().length>0){res();return;}
-    let d=false;const fin=()=>{if(!d){d=true;res();}};
-    window.speechSynthesis.onvoiceschanged=fin;setTimeout(fin,2500);
+/* ══════════════════════════════════════════════
+   TTS — Gemini + Browser fallback
+══════════════════════════════════════════════ */
+function waitVoices() {
+  return new Promise(res => {
+    if (!window.speechSynthesis) { res(); return; }
+    if (window.speechSynthesis.getVoices().length > 0) { res(); return; }
+    let done=false;
+    const fin=()=>{ if(!done){done=true;res();} };
+    window.speechSynthesis.onvoiceschanged=fin;
+    setTimeout(fin, 2500);
   });
 }
-async function speak(text){
-  const clean=text.replace(/\{\{CARD:[^}]+\}\}/g,'').replace(/[*#_◆▶⬡\[\]]/g,'').trim();
-  if(!clean)return;
-  const gk=localStorage.getItem('kira_gem')||'';
-  if(gk){const ok=await speakGemini(clean,gk);if(ok)return;}
+
+async function speak(text) {
+  const clean = text.replace(/\{\{CARD:[^}]+\}\}/g,'').replace(/[*#_◆▶⬡\[\]]/g,'').trim();
+  if (!clean) return;
+  const gk = localStorage.getItem('kira_gem')||'';
+  if (gk) { const ok=await speakGemini(clean,gk); if(ok) return; }
   await speakBrowser(clean);
 }
-async function speakGemini(text,key){
-  const voice=localStorage.getItem('kira_gem_voice')||'Kore';
-  try{
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        contents:[{parts:[{text}]}],
-        generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}
-      })
-    });
-    if(!r.ok)return false;
-    const data=await r.json();
-    const part=data?.candidates?.[0]?.content?.parts?.[0];
-    if(!part?.inlineData?.data)return false;
-    const wav=pcmToWav(part.inlineData.data,parseInt(part.inlineData.mimeType?.split('rate=')[1])||24000);
+
+async function speakGemini(text, key) {
+  const voice = localStorage.getItem('kira_gem_voice')||'Kore';
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          contents:[{parts:[{text}]}],
+          generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}
+        }) }
+    );
+    if (!r.ok) return false;
+    const data = await r.json();
+    const part = data?.candidates?.[0]?.content?.parts?.[0];
+    if (!part?.inlineData?.data) return false;
+    const wav = pcmToWav(part.inlineData.data, parseInt(part.inlineData.mimeType?.split('rate=')[1])||24000);
     return playBuf(wav);
-  }catch(e){return false;}
+  } catch(e) { return false; }
 }
-function pcmToWav(b64,rate){
-  const buf=Uint8Array.from(atob(b64),c=>c.charCodeAt(0)).buffer;
-  const hdr=new ArrayBuffer(44),v=new DataView(hdr);
+
+function pcmToWav(b64, rate) {
+  const buf = Uint8Array.from(atob(b64), c=>c.charCodeAt(0)).buffer;
+  const hdr=new ArrayBuffer(44), v=new DataView(hdr);
   v.setUint32(0,0x52494646,false);v.setUint32(4,36+buf.byteLength,true);
   v.setUint32(8,0x57415645,false);v.setUint32(12,0x666d7420,false);
   v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
@@ -1091,131 +1027,138 @@ function pcmToWav(b64,rate){
   out.set(new Uint8Array(hdr),0);out.set(new Uint8Array(buf),hdr.byteLength);
   return out.buffer;
 }
-function playBuf(buf){
-  return new Promise(res=>{
-    if(currentAudio){try{currentAudio.pause();}catch(e){}currentAudio=null;}
-    const url=URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
-    const a=new Audio(url);currentAudio=a;
-    const end=ok=>{URL.revokeObjectURL(url);currentAudio=null;res(ok);};
-    a.onended=()=>end(true);a.onerror=()=>end(false);
+
+function playBuf(buf) {
+  return new Promise(res => {
+    if (currentAudio) { try{currentAudio.pause();}catch(e){} currentAudio=null; }
+    const url = URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+    const a = new Audio(url); currentAudio=a;
+    const end = ok => { URL.revokeObjectURL(url); currentAudio=null; res(ok); };
+    a.onended=()=>end(true); a.onerror=()=>end(false);
     a.play().catch(()=>end(false));
-    setTimeout(()=>{try{a.pause();}catch(e){}end(true);},45000);
+    setTimeout(()=>{ try{a.pause();}catch(e){} end(true); }, 45000);
   });
 }
-function speakBrowser(text){
-  return new Promise(res=>{
-    if(!window.speechSynthesis){res();return;}
+
+function speakBrowser(text) {
+  return new Promise(res => {
+    if (!window.speechSynthesis) { res(); return; }
     window.speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(text.substring(0,600));
-    u.lang='pt-BR';u.rate=1.05;u.pitch=1.05;u.volume=1;
-    const pref=localStorage.getItem('kira_bv')||'';
-    const vs=window.speechSynthesis.getVoices();
-    const v=(pref&&vs.find(x=>x.name===pref))||vs.find(x=>x.lang==='pt-BR'&&/Google/i.test(x.name))||vs.find(x=>x.lang==='pt-BR')||vs.find(x=>x.lang.startsWith('pt'))||null;
-    if(v)u.voice=v;
+    const u = new SpeechSynthesisUtterance(text.substring(0,600));
+    u.lang='pt-BR'; u.rate=1.05; u.pitch=1.05; u.volume=1;
+    const pref = localStorage.getItem('kira_bv')||'';
+    const vs = window.speechSynthesis.getVoices();
+    const v = (pref&&vs.find(x=>x.name===pref))
+           || vs.find(x=>x.lang==='pt-BR'&&/Google/i.test(x.name))
+           || vs.find(x=>x.lang==='pt-BR')
+           || vs.find(x=>x.lang.startsWith('pt'))
+           || null;
+    if (v) u.voice=v;
     let done=false;
-    const end=()=>{if(!done){done=true;clearTimeout(tid);clearInterval(wid);res();}};
-    u.onend=end;u.onerror=end;
+    const end=()=>{ if(!done){done=true;clearTimeout(tid);clearInterval(wid);res();} };
+    u.onend=end; u.onerror=end;
     const tid=setTimeout(()=>{window.speechSynthesis.cancel();end();},35000);
     const wid=setInterval(()=>{if(window.speechSynthesis.paused)window.speechSynthesis.resume();if(done)clearInterval(wid);},7000);
     window.speechSynthesis.speak(u);
   });
 }
-function previewVoz(){speak('Kira online. Sistemas sincronizados. Pode falar.');}
 
-/* ─── CARDS ──────────────────────────────────── */
-function parseCards(text){
-  const re=/\{\{CARD:(.*?)\|(.*?)\|(.*?)\}\}/g;let m;
-  while((m=re.exec(text))!==null)showCard(m[1],m[2],m[3]);
+function previewVoz() {
+  speak('Kira online. Dados sincronizados. Pode falar.');
+}
+
+/* ══════════════════════════════════════════════
+   METRIC CARDS {{CARD:T|V|U}}
+══════════════════════════════════════════════ */
+function parseCards(text) {
+  const re=/\{\{CARD:(.*?)\|(.*?)\|(.*?)\}\}/g; let m;
+  while((m=re.exec(text))!==null) showCard(m[1],m[2],m[3]);
   return text.replace(re,'').trim();
 }
-function showCard(title,val,unit){
-  const c=document.createElement('div');c.className='mcard';
+function showCard(title,val,unit) {
+  const c=document.createElement('div'); c.className='mcard';
   c.innerHTML=`<div class="mc-t">${title}</div><div class="mc-v">${val}</div><div class="mc-l">${unit}</div>`;
   document.body.appendChild(c);
-  setTimeout(()=>{c.classList.add('out');setTimeout(()=>c.remove(),500);},10000);
+  setTimeout(()=>{ c.classList.add('out'); setTimeout(()=>c.remove(),500); },10000);
 }
 
-/* ─── CHAT UI ────────────────────────────────── */
-function addChat(role,text){
+/* ══════════════════════════════════════════════
+   CHAT UI + LOG
+══════════════════════════════════════════════ */
+function addChat(role, text) {
   const box=document.getElementById('chatbox');
   const d=document.createElement('div');
   d.className='cm cm-'+(role==='user'?'u':'k');
   d.innerHTML=`<div class="cm-lbl">${role==='user'?'VOCÊ':'KIRA'}</div>${text.slice(0,220)}${text.length>220?'…':''}`;
   box.appendChild(d);
-  while(box.children.length>10)box.removeChild(box.firstChild);
+  while(box.children.length>10) box.removeChild(box.firstChild);
   box.scrollTop=box.scrollHeight;
 }
-function addLog(msg,type='sys'){
-  const log=document.getElementById('log');if(!log)return;
-  const d=document.createElement('div');d.className='le';
+function addLog(msg, type='sys') {
+  const log=document.getElementById('log'); if(!log) return;
+  const d=document.createElement('div'); d.className='le';
   const c={user:'#38bdf8',kira:'#ec4899',sys:'rgba(180,170,200,.24)',err:'#ff5555'};
   d.style.color=c[type]||c.sys;
   d.textContent='['+new Date().toLocaleTimeString('pt-BR')+'] '+msg;
   log.appendChild(d);
-  while(log.children.length>25)log.removeChild(log.firstChild);
+  while(log.children.length>25) log.removeChild(log.firstChild);
 }
 
-/* ─── CONTROLES ──────────────────────────────── */
-function orbTap(){
-  if(!dbReady){return;} /* Boot ainda em andamento — não faz nada */
-  if(isBusy)return;
-  if(!micGranted){openMicSheet();return;}
-  if(isRec)stopRec();else{startRec();}
+/* ══════════════════════════════════════════════
+   SETTINGS
+══════════════════════════════════════════════ */
+function saveSettings() {
+  localStorage.setItem('kira_gem',       document.getElementById('gem-key')?.value||'');
+  localStorage.setItem('kira_gem_voice', document.getElementById('gem-voice')?.value||'Kore');
+  localStorage.setItem('kira_bv',        document.getElementById('bv-sel')?.value||'');
 }
-function toggleHF(){
-  isHF=document.getElementById('hft').checked;
-  if(isHF&&!micGranted){openMicSheet();document.getElementById('hft').checked=false;isHF=false;return;}
-  if(isHF&&dbReady&&!isBusy&&!isRec)startRec();
-  else if(!isHF&&isRec)stopRec();
-}
-function openCfg(){document.getElementById('cfg').classList.add('open');refreshBrainUI();refreshCfgDB();populateBVoices();}
-function closeCfg(){document.getElementById('cfg').classList.remove('open');}
-
-/* ─── SETTINGS ───────────────────────────────── */
-function saveSettings(){
-  localStorage.setItem('kira_gem',document.getElementById('gem-key')?.value||'');
-  localStorage.setItem('kira_gem_voice',document.getElementById('gem-voice')?.value||'Kore');
-  localStorage.setItem('kira_bv',document.getElementById('bv-sel')?.value||'');
-}
-function loadSettings(){
-  const gk=localStorage.getItem('kira_gem')||'';
-  const gv=localStorage.getItem('kira_gem_voice')||'Kore';
-  const el=document.getElementById('gem-key');if(el)el.value=gk;
-  const ev=document.getElementById('gem-voice');if(ev)ev.value=gv;
+function loadSettings() {
+  const el=document.getElementById('gem-key');   if(el) el.value=localStorage.getItem('kira_gem')||'';
+  const ev=document.getElementById('gem-voice'); if(ev) ev.value=localStorage.getItem('kira_gem_voice')||'Kore';
   chatHist=JSON.parse(localStorage.getItem(HKEY)||'[]');
 }
-function populateBVoices(){
-  const sel=document.getElementById('bv-sel');if(!sel)return;
+function populateBVoices() {
+  const sel=document.getElementById('bv-sel'); if(!sel) return;
   const vs=window.speechSynthesis?.getVoices()||[];
   const pt=vs.filter(v=>v.lang.startsWith('pt'));
   const pref=localStorage.getItem('kira_bv')||'';
-  while(sel.options.length>1)sel.remove(1);
+  while(sel.options.length>1) sel.remove(1);
   pt.forEach(v=>{
-    const o=document.createElement('option');o.value=v.name;
+    const o=document.createElement('option'); o.value=v.name;
     o.textContent=v.name+' ('+v.lang+')';
-    if(v.name===pref)o.selected=true;
+    if(v.name===pref) o.selected=true;
     sel.appendChild(o);
   });
 }
-window.speechSynthesis?.addEventListener('voiceschanged',populateBVoices);
+window.speechSynthesis?.addEventListener('voiceschanged', populateBVoices);
 
-/* ─── CURSOR ─────────────────────────────────── */
+function openCfg()  { document.getElementById('cfg').classList.add('open'); refreshBrainUI(); refreshCfgDB(); populateBVoices(); }
+function closeCfg() { document.getElementById('cfg').classList.remove('open'); }
+
+/* ══════════════════════════════════════════════
+   CURSOR + KEYBOARD
+══════════════════════════════════════════════ */
 let cx=0,cy=0,mx=0,my=0;
 document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;});
 (function aC(){cx+=(mx-cx)*.13;cy+=(my-cy)*.13;const c=document.getElementById('cur');if(c){c.style.left=cx+'px';c.style.top=cy+'px';}requestAnimationFrame(aC);})();
 
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeCfg();closeMicSheet();}
-  if(e.key===' '&&!e.target.matches('input,select,textarea')&&!isBusy){e.preventDefault();orbTap();}
+  if(e.key==='Escape') closeCfg();
+  if(e.key===' '&&!e.target.matches('input,select,textarea')&&micStream){
+    e.preventDefault(); orbClick();
+  }
 });
 
-/* ─── INIT ───────────────────────────────────── */
-window.addEventListener('load',()=>{
-  loadSettings();populateBVoices();resW();refreshBrainUI();
-  /* Inicia Firebase automaticamente — independente do mic */
-  initFirebase();
-  /* Pede permissão de mic via bottom sheet APÓS boot terminar
-     (finishBoot abre o sheet se mic não foi concedido ainda) */
+/* ══════════════════════════════════════════════
+   INICIALIZAÇÃO
+══════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  loadSettings();
+  populateBVoices();
+  resW();
+  refreshBrainUI();
+  /* Firebase inicia AUTOMATICAMENTE — sem esperar clique */
+  startFirebase();
 });
 </script>
 </body>

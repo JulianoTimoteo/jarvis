@@ -741,11 +741,13 @@ async function processBrain(blob) {
 ══════════════════════════════════════════════ */
 async function askGroq(query) {
     const topM = Object.values(brain.domain.machines)
-        .sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0)).slice(0,5)
+        .sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0)).slice(0,10)
         .map(m=>`${m.cod}: TMD=${m.tmd_medio||'?'} t/dia, total=${(m.total_ton||0).toFixed(0)} t`).join('\n');
-    const insStr = brain.insights.slice(0,3).map(i=>'• '+i.text).join('\n');
-    const histCtx = chatHistory.map(h=>(h.role==='user'?'Senhor':'Kira')+': '+h.content).join('\n');
-    const ctx = buildContext(query);
+    const insStr  = brain.insights.slice(0,4).map(i=>'• '+i.text).join('\n');
+    const histCtx = chatHistory.slice(-6).map(h=>(h.role==='user'?'Senhor':'Kira')+': '+h.content).join('\n');
+
+    /* Contexto pré-agregado — nunca envia rows brutas */
+    const ctx = buildContextSmart(query);
 
     const sys =
 `Você é Kira, Secretária Executiva Sênior da AgroAnalytics, Usina Pitangueiras.
@@ -757,21 +759,21 @@ CARDS: Use {{CARD:TÍTULO|VALOR|UNIDADE}} para métricas solicitadas.
 
 DOMÍNIO: TMD=Ton/Máquina/Dia, TMS=Ton.Métricas.Sacarose, TCH=Ton.Cana/Hectare, ATR=Açúcar Total Recuperável
 
-KIRA BRAIN:
+KIRA BRAIN (aprendizado acumulado):
 ${insStr||'Aprendendo…'}
-TOP MÁQUINAS:
-${topM||'Sem dados.'}
 
-HISTÓRICO: ${histCtx||'(início da conversa)'}
+TOP 10 MÁQUINAS POR TMD:
+${topM||'Sem dados suficientes.'}
 
-DADOS FIREBASE (${Object.keys(dbData).length} tabelas):
+HISTÓRICO RECENTE:
+${histCtx||'(início da conversa)'}
+
+ANÁLISE DOS DADOS (pré-calculado localmente):
 ${ctx}
 
 HORA: ${new Date().toLocaleString('pt-BR')}
 
-ANÁLISE: Use os dados reais acima. Nunca invente números.
-Para TMD: some toneladas ÷ dias únicos de operação.
-Para "máquina que mais colheu": agrupe por código, some toneladas.`;
+REGRAS: Use os números acima. Nunca invente. Responda direto.`;
 
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method:'POST',
@@ -782,7 +784,10 @@ Para "máquina que mais colheu": agrupe por código, some toneladas.`;
             max_tokens:400, temperature:.72
         })
     });
-    if (!r.ok) throw new Error('Groq HTTP '+r.status);
+    if (!r.ok) {
+        const errTxt = await r.text().catch(()=>'');
+        throw new Error('Groq HTTP '+r.status+' '+errTxt.slice(0,120));
+    }
     const ans = (await r.json()).choices[0].message.content;
     chatHistory.push({role:'user',content:query},{role:'assistant',content:ans});
     if (chatHistory.length>16) chatHistory=chatHistory.slice(-16);
@@ -790,21 +795,118 @@ Para "máquina que mais colheu": agrupe por código, some toneladas.`;
     return ans;
 }
 
-function buildContext(query) {
-    const ql=query.toLowerCase();
-    const pri=[];
-    if(/colh|harv|maq|equip|tmd/i.test(ql))  pri.push('producao','colheita','_producao','_colheita');
-    if(/safra|acm|acumul/i.test(ql))          pri.push('acmSafra');
-    if(/meta|objetivo/i.test(ql))             pri.push('metas');
-    if(/pati|recep/i.test(ql))                pri.push('patio','_patio');
-    if(/oper|motorist/i.test(ql))             pri.push('operadores','_operadores');
-    const ctx={},added=new Set();
-    for(const k of pri){if(dbData[k]?.length){ctx[k]={total:dbData[k].length,dados:dbData[k].slice(0,300)};added.add(k);}}
-    for(const[k,v]of Object.entries(dbData)){
-        if(added.has(k)||!Array.isArray(v)||!v.length)continue;
-        ctx[k]={total:v.length,amostra:v.slice(0,30),colunas:Object.keys(v[0]||{})};
+/* ──────────────────────────────────────────────────────
+   buildContextSmart — agrega os dados LOCALMENTE
+   e envia apenas estatísticas compactas para o Groq.
+   Resolve 413 (payload too large) e 400 (token limit).
+   
+   Para perguntas de máquinas/TMD: usa o brain que já
+   tem tudo calculado — não precisa reenviar as rows.
+   Para tabelas pequenas (metas, acmSafra): envia direto.
+   Para tabelas grandes: envia só agregações.
+────────────────────────────────────────────────────── */
+function buildContextSmart(query) {
+    const ql = query.toLowerCase();
+    const out = {};
+
+    /* ── RESUMO DE TODAS AS TABELAS ── */
+    out.tabelas_disponiveis = Object.entries(dbData)
+        .filter(([,v])=>Array.isArray(v)&&v.length>0)
+        .map(([k,v])=>k.replace(/^_/,'')+': '+v.length+' registros')
+        .join(', ');
+
+    /* ── PERGUNTA SOBRE MÁQUINAS / TMD / COLHEDORA ── */
+    if (/colh|harv|maq|equip|tmd|produzi|maior|menor|melhor/i.test(ql)) {
+        const ms = Object.values(brain.domain.machines)
+            .sort((a,b)=>(b.total_ton||0)-(a.total_ton||0));
+        if (ms.length) {
+            out.ranking_maquinas_por_total = ms.slice(0,20)
+                .map(m=>`${m.cod}: ${(m.total_ton||0).toFixed(0)} t total, TMD_medio=${m.tmd_medio||'?'} t/dia`)
+                .join('\n');
+            out.maquina_mais_produziu = ms[0]
+                ? `${ms[0].cod} com ${(ms[0].total_ton||0).toFixed(0)} toneladas`
+                : 'indefinido';
+
+            /* Ranking TMD */
+            const byTMD = Object.values(brain.domain.machines)
+                .filter(m=>m.tmd_medio>0).sort((a,b)=>b.tmd_medio-a.tmd_medio);
+            if (byTMD.length) {
+                out.ranking_maquinas_por_tmd = byTMD.slice(0,20)
+                    .map(m=>`${m.cod}: TMD=${m.tmd_medio} t/dia, total=${(m.total_ton||0).toFixed(0)} t`)
+                    .join('\n');
+                out.melhor_tmd = `${byTMD[0].cod} com TMD médio de ${byTMD[0].tmd_medio} t/dia`;
+            }
+        }
     }
-    return JSON.stringify(ctx);
+
+    /* ── PERGUNTA SOBRE SAFRA / ACUMULADO ── */
+    if (/safra|acm|acumul/i.test(ql)) {
+        const rows = dbData['acmSafra'] || dbData['_acmSafra'] || [];
+        if (rows.length) out.acmSafra = rows.slice(0,50); /* tabela pequena — envia direto */
+    }
+
+    /* ── PERGUNTA SOBRE METAS ── */
+    if (/meta|objetivo|plan/i.test(ql)) {
+        const rows = dbData['metas'] || [];
+        if (rows.length) out.metas = rows; /* tabela pequena */
+    }
+
+    /* ── PERGUNTA SOBRE POTENCIAL ── */
+    if (/potenc|capacid/i.test(ql)) {
+        const rows = dbData['potencial'] || [];
+        if (rows.length) out.potencial = rows.slice(0,30);
+    }
+
+    /* ── PERGUNTA SOBRE PRODUÇÃO GERAL (agrega, não envia rows brutas) ── */
+    if (/produ|tonelad|moagem|total|hoje|dia/i.test(ql)) {
+        out.producao_resumo = agregarTabela('producao');
+        out.tpl_resumo      = agregarTabela('tpl');
+        out.colConD1_resumo = agregarTabela('colConD1');
+        out.colConAcm_resumo= agregarTabela('colConAcm');
+    }
+
+    /* ── RESUMO GERAL (para qualquer pergunta) ── */
+    out.totais_gerais = {};
+    for (const [k,v] of Object.entries(dbData)) {
+        if (!Array.isArray(v)||!v.length) continue;
+        const nome = k.replace(/^_/,'');
+        /* Soma campos numéricos principais */
+        const pesoKey = Object.keys(v[0]||{}).find(c=>/peso|ton|weight/i.test(c));
+        if (pesoKey) {
+            const soma = v.reduce((a,r)=>{const n=parseFloat(String(r[pesoKey]||'').replace(',','.'));return a+(isNaN(n)?0:n);},0);
+            if (soma>0) out.totais_gerais[nome+'_total_ton'] = soma.toFixed(2);
+        }
+        out.totais_gerais[nome+'_registros'] = v.length;
+    }
+
+    /* Converte para string e garante limite de ~3000 chars */
+    let str = JSON.stringify(out, null, 1);
+    if (str.length > 6000) str = str.slice(0, 6000) + '\n…(truncado)';
+    return str;
+}
+
+/* Agrega uma tabela em estatísticas compactas sem enviar rows brutas */
+function agregarTabela(nome) {
+    const rows = dbData[nome] || dbData['_'+nome] || [];
+    if (!rows.length) return null;
+    const keys = Object.keys(rows[0]||{});
+    const stats = { total_registros: rows.length, colunas: keys };
+    keys.forEach(k=>{
+        const nums = rows.map(r=>{const v=parseFloat(String(r[k]||'').replace(',','.'));return isNaN(v)?null:v;}).filter(v=>v!==null);
+        if (nums.length>1) {
+            const soma = nums.reduce((a,b)=>a+b,0);
+            stats['stats_'+k] = {
+                total: +soma.toFixed(2),
+                media: +(soma/nums.length).toFixed(2),
+                min:   Math.min(...nums),
+                max:   Math.max(...nums),
+                n:     nums.length
+            };
+        }
+    });
+    /* Amostra mínima para contexto */
+    stats.amostra_5_linhas = rows.slice(0,5);
+    return stats;
 }
 
 /* ══════════════════════════════════════════════

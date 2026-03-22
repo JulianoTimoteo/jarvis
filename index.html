@@ -1,1165 +1,984 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#0a0010">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="KIRA">
-<title>KIRA — AgroAnalytics</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kira — AgroAnalytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK — igual ao original que funcionava -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
-<!-- Firebase SDK — carrega síncrono, antes de qualquer JS -->
-<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+    <style>
+        body {
+            background-color: #010409;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        
+        #orb-container {
+            position: relative;
+            width: 240px;
+            height: 240px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            z-index: 20;
+        }
 
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+        .orb-glow {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(25px);
+            transition: all 0.5s ease;
+        }
 
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-:root{
-  --bg:#0a0010;
-  --pk:#ec4899; --pk2:#f472b6;
-  --teal:#2dd4bf; --sky:#38bdf8; --vio:#a78bfa;
-  --txt:rgba(220,215,235,.88);
-  --oc:var(--pk); --og:rgba(236,72,153,.7);
-  --st:env(safe-area-inset-top,0px);
-  --sb:env(safe-area-inset-bottom,0px);
-}
-body.sl{--oc:var(--sky);  --og:rgba(56,189,248,.8);}
-body.st{--oc:var(--vio);  --og:rgba(167,139,250,.8);}
-body.ss{--oc:var(--teal); --og:rgba(45,212,191,.8);}
+        .thinking .orb-glow {
+            background: radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 70%);
+            animation: pulse-glow 1s infinite alternate;
+        }
 
-html,body{width:100dvw;height:100dvh;overflow:hidden;
-  background:var(--bg);color:var(--txt);
-  font-family:'Inter',sans-serif;user-select:none;-webkit-touch-callout:none;}
-body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:linear-gradient(rgba(236,72,153,.015) 1px,transparent 1px),
-             linear-gradient(90deg,rgba(236,72,153,.015) 1px,transparent 1px);
-  background-size:60px 60px;}
+        .listening .orb-glow {
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, transparent 70%);
+            transform: scale(1.15);
+        }
 
-/* ══ INIT SCREEN (única tela de espera) ══ */
-#init{
-  position:fixed;inset:0;z-index:800;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:radial-gradient(ellipse at 50% 46%,#1a0028 0%,#0a0010 68%);
-  transition:opacity .55s ease;
-  padding:28px 28px calc(var(--sb)+28px);gap:0;
-}
-#init.out{opacity:0;pointer-events:none;}
-#init.gone{display:none;}
+        .speaking .orb-glow {
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+            animation: pulse-glow 0.8s infinite alternate;
+        }
 
-.ilogo{font-family:'Orbitron',monospace;font-weight:900;
-  font-size:clamp(3rem,13vw,6rem);letter-spacing:.4em;
-  background:linear-gradient(140deg,#fff 0%,#f9a8d4 45%,#ec4899 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  filter:drop-shadow(0 0 22px rgba(236,72,153,.5));margin-bottom:4px;}
-.isub{font-size:.44rem;letter-spacing:.4em;color:rgba(236,72,153,.28);
-  text-transform:uppercase;margin-bottom:clamp(24px,5vmin,40px);}
+        @keyframes pulse-glow {
+            0% { transform: scale(1); opacity: 0.3; }
+            100% { transform: scale(1.2); opacity: 0.5; }
+        }
 
-/* Ring progress */
-.irw{position:relative;width:clamp(110px,26vmin,155px);height:clamp(110px,26vmin,155px);
-  display:flex;align-items:center;justify-content:center;
-  margin-bottom:clamp(18px,4vmin,32px);}
-.irw svg{position:absolute;inset:0;width:100%;height:100%;}
-.rt{fill:none;stroke:rgba(236,72,153,.08);stroke-width:2;}
-.rf{fill:none;stroke:var(--pk);stroke-width:2;stroke-linecap:round;
-  stroke-dasharray:440;stroke-dashoffset:440;
-  transition:stroke-dashoffset .35s ease;filter:drop-shadow(0 0 3px var(--pk));}
-.ioc{width:clamp(48px,12vmin,70px);height:clamp(48px,12vmin,70px);border-radius:50%;z-index:2;
-  background:radial-gradient(circle at 38% 33%,rgba(255,255,255,.9) 0%,#ec4899 28%,rgba(60,0,80,.5) 62%,transparent 82%);
-  box-shadow:0 0 28px rgba(236,72,153,.8),0 0 56px rgba(236,72,153,.3);
-  animation:iocP 2.5s ease-in-out infinite;}
-@keyframes iocP{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
+        canvas {
+            position: absolute;
+            z-index: 10;
+            pointer-events: none;
+        }
 
-.imsg{font-size:clamp(.44rem,.56rem,.52rem);letter-spacing:.16em;
-  color:rgba(236,72,153,.42);text-align:center;min-height:18px;margin-bottom:8px;}
-.ipw{width:180px;height:2px;background:rgba(236,72,153,.1);border-radius:1px;overflow:hidden;}
-.ipb{height:100%;width:0%;
-  background:linear-gradient(90deg,#be185d,#ec4899,#f9a8d4);
-  border-radius:1px;transition:width .3s ease;box-shadow:0 0 5px var(--pk);}
+        .status-badge {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
 
-/* O botão principal — aparece quando dados carregados */
-#init-btn{
-  margin-top:clamp(16px,3vmin,26px);
-  padding:15px 44px;
-  border:1.5px solid rgba(236,72,153,.4);
-  background:rgba(236,72,153,.1);
-  color:rgba(236,72,153,.88);
-  font-family:'Orbitron',monospace;
-  font-size:clamp(.5rem,.68rem,.62rem);letter-spacing:.3em;
-  border-radius:6px;cursor:pointer;touch-action:manipulation;
-  transition:all .22s;display:none;
-}
-#init-btn:hover,#init-btn:active{
-  background:rgba(236,72,153,.22);
-  box-shadow:0 0 28px rgba(236,72,153,.3);}
-#init-btn.show{display:block;animation:btnIn .4s ease;}
-@keyframes btnIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.05); transition: .3s; border-radius: 20px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 14px; width: 14px;
+            left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #ec4899; }
+        input:checked + .slider:before { transform: translateX(20px); }
 
-.ierr{margin-top:14px;font-size:.55rem;letter-spacing:.08em;
-  color:rgba(255,80,100,.68);text-align:center;
-  max-width:280px;line-height:1.9;display:none;}
+        #card-container {
+            position: absolute; right: 30px; top: 100px; width: 260px;
+            display: flex; flex-direction: column; gap: 10px; z-index: 30; pointer-events: none;
+        }
+        .data-card {
+            background: rgba(13, 17, 23, 0.98);
+            border-left: 4px solid #ec4899;
+            padding: 14px; border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+            transform: translateX(120%); opacity: 0;
+            animation: cardEnter 0.4s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes cardEnter { to { transform: translateX(0); opacity: 1; } }
+        .data-card.fade-out { animation: cardExit 0.6s forwards ease-in; }
+        @keyframes cardExit { to { transform: translateX(150%); opacity: 0; } }
 
-/* ══ APP INTERFACE ══ */
-#hdr{position:fixed;top:0;left:0;right:0;z-index:60;pointer-events:none;
-  padding:calc(var(--st)+9px) 15px 9px;
-  display:flex;align-items:center;justify-content:space-between;
-  background:linear-gradient(to bottom,rgba(10,0,16,.9) 60%,transparent);}
-.hl{font-family:'Orbitron',monospace;font-weight:900;font-size:1.1rem;
-  letter-spacing:.3em;color:var(--pk);text-shadow:0 0 14px rgba(236,72,153,.4);}
-.hr{display:flex;align-items:center;gap:8px;pointer-events:all;}
-.cob{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:18px;
-  background:rgba(236,72,153,.06);border:1px solid rgba(236,72,153,.1);
-  font-size:.4rem;letter-spacing:.18em;color:rgba(236,72,153,.38);}
-.cod{width:5px;height:5px;border-radius:50%;background:#f59e0b;
-  box-shadow:0 0 5px #f59e0b;transition:background .4s,box-shadow .4s;}
-.cod.ok{background:#10b981;box-shadow:0 0 5px #10b981;}
-.icb{width:30px;height:30px;border-radius:50%;
-  background:rgba(236,72,153,.07);border:1px solid rgba(236,72,153,.1);
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;touch-action:manipulation;transition:all .2s;
-  color:rgba(236,72,153,.4);font-size:.85rem;}
-.icb:hover,.icb:active{background:rgba(236,72,153,.16);color:var(--pk);}
+        #calibration-overlay { background: #010409; z-index: 1000; }
+        .log-line { font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px; }
 
-#main{position:relative;z-index:10;width:100%;height:100dvh;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:calc(var(--st)+54px) 20px calc(var(--sb)+128px);}
+        /* ── SETTINGS PANEL ── */
+        #cfg-panel {
+            position: fixed; top: 0; right: 0; bottom: 0; z-index: 400;
+            width: min(300px,90vw);
+            background: linear-gradient(170deg,rgba(12,0,20,.99),rgba(8,0,14,.995));
+            border-left: 1px solid rgba(236,72,153,.1);
+            transform: translateX(102%); transition: transform .38s cubic-bezier(.34,1.1,.64,1);
+            padding: 56px 16px 20px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        #cfg-panel.open { transform: translateX(0); }
+        .cfg-hdr { position: absolute; top: 12px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .cfg-ht { font-family: 'Orbitron', sans-serif; font-size: .44rem; letter-spacing: .26em; color: rgba(236,72,153,.35); }
+        .cfg-hx { font-size: .95rem; cursor: pointer; color: rgba(236,72,153,.28); padding: 4px 8px; transition: color .2s; }
+        .cfg-hx:hover { color: #ff1744; }
+        .cs { border-bottom: 1px solid rgba(236,72,153,.07); padding-bottom: 12px; }
+        .ct { font-family: 'Orbitron', sans-serif; font-size: .41rem; letter-spacing: .24em; color: rgba(236,72,153,.32); margin-bottom: 8px; }
+        .cl { font-size: .5rem; letter-spacing: .09em; color: rgba(236,72,153,.4); display: block; margin-bottom: 4px; }
+        .ci {
+            width: 100%; background: rgba(236,72,153,.06); border: 1px solid rgba(236,72,153,.12);
+            color: rgba(220,215,235,.88); font-family: 'Inter',sans-serif; font-size: .56rem;
+            padding: 7px 9px; border-radius: 5px; outline: none; transition: border .2s;
+            -webkit-appearance: none; appearance: none;
+        }
+        .ci:focus { border-color: rgba(236,72,153,.35); }
+        .ci option { background: #010409; }
+        .cb {
+            width: 100%; padding: 8px; border: 1px solid rgba(236,72,153,.18);
+            background: rgba(236,72,153,.06); color: rgba(236,72,153,.6);
+            font-family: 'Orbitron',sans-serif; font-size: .44rem; letter-spacing: .16em;
+            border-radius: 5px; cursor: pointer; transition: all .2s; margin-top: 6px;
+        }
+        .cb:hover { background: rgba(236,72,153,.15); color: rgba(236,72,153,.92); }
+        .cb.red { border-color: rgba(255,23,68,.22); background: rgba(255,23,68,.05); color: rgba(255,80,100,.5); }
+        .cb.red:hover { background: rgba(255,23,68,.13); }
+        #brain-st { font-size: .46rem; color: rgba(236,72,153,.34); line-height: 2; letter-spacing: .07em; white-space: pre-wrap; }
+        .cnote { font-size: .43rem; color: rgba(236,72,153,.3); line-height: 1.8; letter-spacing: .06em;
+            padding: 7px 10px; background: rgba(236,72,153,.04); border-radius: 5px; border-left: 2px solid rgba(236,72,153,.2); }
+        .cnote a { color: rgba(100,200,255,.55); }
 
-/* ── ORB ── */
-#stage{position:relative;width:clamp(210px,52vmin,296px);height:clamp(210px,52vmin,296px);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-#wc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
-.dr{position:absolute;inset:0;border-radius:50%;pointer-events:none;}
-.dr1{border:1px solid rgba(236,72,153,.1);animation:drR 20s linear infinite;}
-.dr1::before{content:'';position:absolute;width:6px;height:6px;border-radius:50%;
-  background:var(--oc);box-shadow:0 0 8px var(--og);
-  top:-3px;left:50%;transform:translateX(-50%);transition:background .4s,box-shadow .4s;}
-.dr2{inset:16px;border:1px dashed rgba(236,72,153,.06);animation:drR 13s linear infinite reverse;}
-.dr3{inset:30px;border:1px solid rgba(236,72,153,.04);animation:drR 8s linear infinite;}
-@keyframes drR{to{transform:rotate(360deg);}}
-#orb{position:relative;z-index:5;
-  width:clamp(86px,22vmin,122px);height:clamp(86px,22vmin,122px);
-  border-radius:50%;cursor:pointer;touch-action:manipulation;
-  -webkit-user-select:none;user-select:none;}
-#orb-c{width:100%;height:100%;border-radius:50%;
-  background:radial-gradient(circle at 38% 33%,rgba(255,255,255,.92) 0%,var(--oc) 28%,rgba(40,0,60,.55) 65%,transparent 85%);
-  box-shadow:0 0 0 1px rgba(255,255,255,.05),
-    0 0 20px 5px var(--og),
-    0 0 55px 15px color-mix(in srgb,var(--og) 38%,transparent),
-    0 0 100px 28px color-mix(in srgb,var(--og) 16%,transparent);
-  animation:oI 3.5s ease-in-out infinite;transition:background .5s,box-shadow .5s;}
-body.sl #orb-c{animation:oL .5s ease-in-out infinite alternate;}
-body.st #orb-c{animation:oT 1.2s ease-in-out infinite;}
-body.ss #orb-c{animation:oS .38s ease-in-out infinite alternate;}
-@keyframes oI{0%,100%{transform:scale(1);}50%{transform:scale(1.03);}}
-@keyframes oL{from{transform:scale(.93);}to{transform:scale(1.1);}}
-@keyframes oT{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.09);opacity:1;}}
-@keyframes oS{from{transform:scale(.97);}to{transform:scale(1.1);}}
-#slbl{position:absolute;bottom:clamp(-46px,-8vmin,-36px);left:50%;
-  transform:translateX(-50%);font-family:'Orbitron',monospace;
-  font-size:clamp(.37rem,.49rem,.45rem);letter-spacing:.5em;
-  color:var(--oc);white-space:nowrap;opacity:.65;
-  text-shadow:0 0 10px var(--og);transition:color .4s;}
-#sub{margin-top:clamp(42px,8vmin,58px);font-size:clamp(.73rem,.9rem,.82rem);
-  font-weight:300;letter-spacing:.05em;color:rgba(236,72,153,.62);
-  text-align:center;max-width:82vw;min-height:38px;line-height:1.75;
-  transition:opacity .3s;opacity:0;}
-
-/* ── CHAT BUBBLES ── */
-#chatbox{position:fixed;bottom:calc(var(--sb)+126px);left:0;right:0;
-  max-height:22vh;overflow-y:auto;padding:4px 14px;
-  display:flex;flex-direction:column;gap:6px;pointer-events:none;z-index:20;
-  mask-image:linear-gradient(transparent 0%,black 28%,black 100%);
-  -webkit-mask-image:linear-gradient(transparent 0%,black 28%,black 100%);}
-.cm{font-size:clamp(.56rem,.67rem,.62rem);line-height:1.65;
-  max-width:88%;border-radius:10px;padding:6px 10px;}
-.cm-u{align-self:flex-end;background:rgba(56,189,248,.08);
-  border:1px solid rgba(56,189,248,.13);color:rgba(180,220,255,.62);}
-.cm-k{align-self:flex-start;background:rgba(236,72,153,.07);
-  border:1px solid rgba(236,72,153,.13);color:rgba(249,168,212,.7);}
-.cm-lbl{font-size:.3rem;letter-spacing:.22em;opacity:.42;
-  margin-bottom:2px;font-family:'Orbitron',monospace;}
-
-/* Metric float card */
-.mcard{position:fixed;right:14px;top:72px;
-  background:rgba(12,0,20,.97);border-left:3px solid var(--pk);
-  padding:10px 13px;border-radius:8px;z-index:80;
-  box-shadow:0 16px 36px rgba(0,0,0,.6);min-width:108px;
-  animation:mcIn .4s cubic-bezier(.175,.885,.32,1.3) forwards;}
-@keyframes mcIn{from{transform:translateX(120%);opacity:0;}to{transform:none;opacity:1;}}
-.mcard.out{animation:mcOut .5s ease-in forwards;}
-@keyframes mcOut{to{transform:translateX(130%);opacity:0;}}
-.mc-t{font-size:.34rem;letter-spacing:.18em;color:var(--pk);
-  font-family:'Orbitron',monospace;text-transform:uppercase;margin-bottom:3px;}
-.mc-v{font-family:'Orbitron',monospace;font-size:1rem;font-weight:700;color:#fff;}
-.mc-l{font-size:.32rem;color:rgba(236,72,153,.38);margin-top:2px;letter-spacing:.1em;}
-
-/* ── BOTTOM BAR ── */
-#bar{position:fixed;bottom:0;left:0;right:0;z-index:50;
-  padding:9px 14px calc(var(--sb)+9px);
-  background:linear-gradient(to top,rgba(10,0,16,.95) 60%,transparent);
-  display:flex;flex-direction:column;gap:6px;}
-.brow{display:flex;align-items:center;justify-content:space-between;}
-.hfw{display:flex;align-items:center;gap:7px;}
-.hfl{font-size:.38rem;letter-spacing:.16em;color:rgba(236,72,153,.3);text-transform:uppercase;}
-.sw{position:relative;display:inline-block;width:36px;height:19px;}
-.sw input{opacity:0;width:0;height:0;}
-.sws{position:absolute;cursor:pointer;inset:0;
-  background:rgba(255,255,255,.05);transition:.3s;border-radius:18px;}
-.sws::before{position:absolute;content:"";height:13px;width:13px;
-  left:3px;bottom:3px;background:#fff;transition:.3s;border-radius:50%;}
-.sw input:checked+.sws{background:var(--pk);}
-.sw input:checked+.sws::before{transform:translateX(17px);}
-#dbi{font-size:.38rem;letter-spacing:.13em;color:rgba(236,72,153,.25);}
-#log{max-height:42px;overflow:hidden;font-size:.4rem;line-height:1.55;
-  color:rgba(180,170,200,.24);letter-spacing:.05em;cursor:pointer;transition:max-height .3s;}
-#log.exp{max-height:76px;}
-.le{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-
-/* ── SETTINGS ── */
-#cfg{position:fixed;top:0;right:0;bottom:0;z-index:400;width:min(295px,88vw);
-  background:linear-gradient(170deg,rgba(12,0,20,.99),rgba(8,0,14,.995));
-  border-left:1px solid rgba(236,72,153,.09);
-  transform:translateX(102%);transition:transform .38s cubic-bezier(.34,1.1,.64,1);
-  padding:calc(var(--st)+50px) 15px calc(var(--sb)+15px);
-  overflow-y:auto;display:flex;flex-direction:column;gap:13px;}
-#cfg.open{transform:translateX(0);}
-.cfgH{position:absolute;top:calc(var(--st)+11px);left:15px;right:15px;
-  display:flex;justify-content:space-between;align-items:center;}
-.cfgHt{font-family:'Orbitron',monospace;font-size:.44rem;letter-spacing:.26em;color:rgba(236,72,153,.35);}
-.cfgHx{font-size:.95rem;cursor:pointer;color:rgba(236,72,153,.28);padding:4px 7px;transition:color .2s;}
-.cfgHx:hover{color:#ff1744;}
-.cs{border-bottom:1px solid rgba(236,72,153,.07);padding-bottom:12px;}
-.ct{font-family:'Orbitron',monospace;font-size:.41rem;letter-spacing:.24em;color:rgba(236,72,153,.32);margin-bottom:8px;}
-.cl{font-size:.5rem;letter-spacing:.09em;color:rgba(236,72,153,.4);display:block;margin-bottom:4px;}
-.ci{width:100%;background:rgba(236,72,153,.06);border:1px solid rgba(236,72,153,.12);
-  color:var(--txt);font-family:'Inter',sans-serif;font-size:.56rem;
-  padding:7px 9px;border-radius:5px;outline:none;transition:border .2s;
-  -webkit-appearance:none;appearance:none;}
-.ci:focus{border-color:rgba(236,72,153,.35);}
-.ci option{background:#0a0010;}
-.cbtn{width:100%;padding:8px;border:1px solid rgba(236,72,153,.18);
-  background:rgba(236,72,153,.06);color:rgba(236,72,153,.6);
-  font-family:'Orbitron',monospace;font-size:.44rem;letter-spacing:.16em;
-  border-radius:5px;cursor:pointer;transition:all .2s;margin-top:6px;touch-action:manipulation;}
-.cbtn:hover,.cbtn:active{background:rgba(236,72,153,.15);color:rgba(236,72,153,.92);}
-.cbtn.red{border-color:rgba(255,23,68,.22);background:rgba(255,23,68,.05);color:rgba(255,80,100,.5);}
-.cbtn.red:hover{background:rgba(255,23,68,.13);}
-#brainst{font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;}
-.cnote{font-size:.44rem;color:rgba(236,72,153,.3);line-height:1.8;letter-spacing:.06em;
-  padding:8px 10px;background:rgba(236,72,153,.04);border-radius:5px;
-  border-left:2px solid rgba(236,72,153,.2);}
-.cnote a{color:rgba(100,200,255,.55);}
-
-/* desktop cursor */
-@media(hover:hover){body{cursor:none;}}
-#cur{position:fixed;width:18px;height:18px;
-  border:1px solid rgba(236,72,153,.55);border-radius:50%;pointer-events:none;
-  z-index:9999;transform:translate(-50%,-50%);
-  box-shadow:0 0 5px rgba(236,72,153,.3);display:none;}
-@media(hover:hover){#cur{display:block;}}
-</style>
+        /* ── MIC PERMISSION TIP ── */
+        #mic-tip {
+            display: none;
+            background: rgba(255,200,0,.06); border: 1px solid rgba(255,200,0,.2);
+            border-radius: 6px; padding: 12px 14px; margin-top: 10px;
+            font-size: .58rem; line-height: 1.85; color: rgba(255,220,100,.6); letter-spacing: .07em;
+        }
+        #mic-tip b { color: rgba(255,220,100,.85); }
+    </style>
 </head>
-<body>
+<body class="text-slate-200">
 
-<!-- ════ INIT (boot + único pedido de mic) ════ -->
-<div id="init">
-  <div class="ilogo">KIRA</div>
-  <div class="isub">Executive Intelligence · AgroAnalytics</div>
-  <div class="irw">
-    <svg viewBox="0 0 140 140">
-      <circle class="rt" cx="70" cy="70" r="68"/>
-      <circle class="rf" id="irf" cx="70" cy="70" r="68"/>
-    </svg>
-    <div class="ioc"></div>
-  </div>
-  <div class="imsg" id="imsg">Carregando dados…</div>
-  <div class="ipw"><div class="ipb" id="ipb"></div></div>
-  <!-- Botão aparece SÓ quando Firebase carregou -->
-  <button id="init-btn" onclick="handshake()">🎙 INICIAR KIRA</button>
-  <div class="ierr" id="ierr"></div>
-</div>
+    <!-- ═══ CALIBRATION OVERLAY — fluxo original ═══ -->
+    <div id="calibration-overlay" class="fixed inset-0 flex flex-col items-center justify-center p-8 transition-opacity duration-700">
+        <div class="max-w-md w-full text-center space-y-6">
+            <div class="space-y-1">
+                <h2 class="font-orbitron text-3xl tracking-[0.3em] text-white">KIRA</h2>
+                <p class="text-[10px] tracking-[0.4em] text-slate-500 uppercase">Executive Sênior • v9.0</p>
+            </div>
+            <p id="cal-msg" class="text-xs text-slate-400 italic">Carregando sistemas…</p>
+            <div class="relative h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div id="calibration-bar" class="absolute top-0 left-0 h-full w-0 bg-pink-500 transition-all duration-300"></div>
+            </div>
 
-<!-- ════ INTERFACE PRINCIPAL ════ -->
-<div id="cur"></div>
+            <!-- Botão aparece só quando Firebase carregou -->
+            <button id="btn-init"
+                class="px-12 py-4 bg-pink-500/10 border border-pink-500/30 text-pink-500 font-orbitron text-[10px] tracking-[0.3em] hover:bg-pink-500/20 transition-all rounded-sm uppercase"
+                style="display:none">
+                Iniciar Handshake
+            </button>
 
-<div id="hdr">
-  <div class="hl">KIRA</div>
-  <div class="hr">
-    <div class="cob"><div class="cod" id="cnd"></div><span id="cnt">OFFLINE</span></div>
-    <div class="icb" onclick="openCfg()">⚙</div>
-  </div>
-</div>
-
-<div id="main">
-  <div id="stage">
-    <canvas id="wc"></canvas>
-    <div class="dr dr1"></div><div class="dr dr2"></div><div class="dr dr3"></div>
-    <div id="orb" onclick="orbClick()"><div id="orb-c"></div></div>
-    <div id="slbl">AGUARDANDO</div>
-  </div>
-  <div id="sub"></div>
-</div>
-
-<div id="chatbox"></div>
-
-<div id="bar">
-  <div class="brow">
-    <div class="hfw">
-      <span class="hfl">Mãos Livres</span>
-      <label class="sw">
-        <input type="checkbox" id="hft" onchange="toggleHF()">
-        <span class="sws"></span>
-      </label>
+            <!-- Dica de permissão de mic (aparece após erro) -->
+            <div id="mic-tip">
+                <b>Microfone bloqueado.</b> Para liberar:<br>
+                1. Clique no ícone 🔒 na barra de endereço do browser<br>
+                2. Em "Microfone", selecione <b>Permitir</b><br>
+                3. Recarregue a página (F5)<br><br>
+                <b>Chrome:</b> Configurações → Privacidade → Microfone → Permitir este site
+            </div>
+        </div>
     </div>
-    <div id="dbi">DB: —</div>
-  </div>
-  <div id="log" onclick="this.classList.toggle('exp')"></div>
-</div>
 
-<!-- ════ SETTINGS ════ -->
-<div id="cfg">
-  <div class="cfgH">
-    <span class="cfgHt">◆ CONFIGURAÇÕES</span>
-    <span class="cfgHx" onclick="closeCfg()">✕</span>
-  </div>
-  <div class="cs">
-    <div class="ct">🎙 VOZ TTS</div>
-    <div class="cnote">Voz feminina de alta qualidade:<br>
-      API key gratuita em <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
+    <!-- ═══ HEADER ═══ -->
+    <header class="fixed top-0 w-full p-6 flex justify-between items-center z-50">
+        <div class="flex flex-col">
+            <h1 class="font-orbitron text-2xl font-bold tracking-tighter text-pink-500">KIRA</h1>
+            <span class="text-[8px] tracking-[0.5em] text-slate-500 uppercase">Data Integrated • Executive Intelligence</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                <span class="text-[9px] font-bold tracking-widest text-slate-400 uppercase">Mãos Livres</span>
+                <label class="switch">
+                    <input type="checkbox" id="continuous-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div id="connection-status" class="status-badge px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-medium tracking-widest">
+                <div id="status-dot" class="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]"></div>
+                <span id="status-text">OFFLINE</span>
+            </div>
+            <button onclick="openCfg()"
+                class="w-8 h-8 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 text-sm hover:bg-pink-500/20 transition-all">
+                ⚙
+            </button>
+        </div>
+    </header>
+
+    <!-- ═══ MAIN ═══ -->
+    <main class="h-screen w-full flex flex-col items-center justify-center relative">
+        <div id="card-container"></div>
+        <div id="orb-container">
+            <div class="orb-glow"></div>
+            <canvas id="visualizer"></canvas>
+            <div class="w-28 h-28 rounded-full border border-pink-500/20 flex items-center justify-center bg-slate-900/40 backdrop-blur-xl relative z-20 shadow-2xl">
+                <div class="absolute w-20 h-20 rounded-full border border-dashed border-pink-400/10 animate-[spin_15s_linear_infinite]"></div>
+                <div id="mic-icon" class="text-pink-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" x2="12" y1="19" y2="22"/>
+                    </svg>
+                </div>
+            </div>
+            <div id="subtitle" class="absolute -bottom-28 w-[180%] left-[-40%] text-center opacity-0 transition-all duration-300 translate-y-2">
+                <p class="text-xl font-light text-pink-100 tracking-wide min-h-[1.5em]" id="st-text">…</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer class="fixed bottom-0 w-full p-4 flex justify-center z-50 pointer-events-none">
+        <div class="w-full max-w-2xl bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-2xl p-4 pointer-events-auto">
+            <div class="flex items-center gap-4 mb-2 border-b border-white/5 pb-1">
+                <span class="text-[9px] font-bold tracking-[0.3em] text-pink-500 uppercase">Kira Neural Core v9.0</span>
+                <span id="db-info" class="text-[8px] tracking-widest text-slate-600 ml-2">DB: —</span>
+                <div class="flex-1"></div>
+                <div id="mic-meter" class="h-0.5 w-32 bg-slate-800 rounded-full">
+                    <div id="mic-meter-fill" class="h-full w-0 bg-pink-400 transition-all duration-75"></div>
+                </div>
+            </div>
+            <div id="chat-log" class="h-20 overflow-y-auto space-y-1 pr-2 text-[10px] leading-tight font-mono text-slate-400"></div>
+        </div>
+    </footer>
+
+    <!-- ═══ SETTINGS PANEL ═══ -->
+    <div id="cfg-panel">
+        <div class="cfg-hdr">
+            <span class="cfg-ht">◆ CONFIGURAÇÕES</span>
+            <span class="cfg-hx" onclick="closeCfg()">✕</span>
+        </div>
+        <div class="cs">
+            <div class="ct">🎙 VOZ TTS</div>
+            <div class="cnote">Voz feminina (Gemini) — key gratuita:<br>
+                <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
+            </div>
+            <label class="cl" style="margin-top:9px">Gemini API Key</label>
+            <input class="ci" id="gem-key" type="password" placeholder="AIza…" oninput="saveSettings()">
+            <label class="cl" style="margin-top:7px">Voz Gemini</label>
+            <select class="ci" id="gem-voice" onchange="saveSettings()">
+                <option value="Kore">Kore — Feminino profundo</option>
+                <option value="Aoede">Aoede — Feminino suave</option>
+                <option value="Leda">Leda — Feminino jovem</option>
+                <option value="Sulafat">Sulafat — Caloroso</option>
+                <option value="Charon">Charon — Firme</option>
+                <option value="Zephyr">Zephyr — Neutro</option>
+            </select>
+            <label class="cl" style="margin-top:7px">Voz Browser (fallback)</label>
+            <select class="ci" id="bv-sel" onchange="saveSettings()">
+                <option value="">Auto (melhor pt-BR)</option>
+            </select>
+            <button class="cb" onclick="previewVoz()" style="margin-top:8px">▶ TESTAR VOZ</button>
+        </div>
+        <div class="cs">
+            <div class="ct">🧠 KIRA BRAIN</div>
+            <div id="brain-st">—</div>
+            <button class="cb" onclick="exportBrain()">↓ EXPORTAR BRAIN.JSON</button>
+            <button class="cb red" style="margin-top:5px" onclick="resetBrain()">⚠ RESETAR BRAIN</button>
+        </div>
+        <div class="cs">
+            <div class="ct">📊 FIREBASE</div>
+            <div id="cfg-db" style="font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;">—</div>
+            <button class="cb" style="margin-top:7px" onclick="reloadDB()">↻ RECARREGAR DADOS</button>
+        </div>
     </div>
-    <label class="cl" style="margin-top:9px">Gemini API Key</label>
-    <input class="ci" id="gem-key" type="password" placeholder="AIza…" oninput="saveSettings()">
-    <label class="cl" style="margin-top:7px">Voz Gemini</label>
-    <select class="ci" id="gem-voice" onchange="saveSettings()">
-      <option value="Kore">Kore — Feminino profundo</option>
-      <option value="Aoede">Aoede — Feminino suave</option>
-      <option value="Leda">Leda — Feminino jovem</option>
-      <option value="Sulafat">Sulafat — Caloroso</option>
-      <option value="Charon">Charon — Firme</option>
-      <option value="Zephyr">Zephyr — Neutro</option>
-    </select>
-    <label class="cl" style="margin-top:7px">Voz Browser (fallback)</label>
-    <select class="ci" id="bv-sel" onchange="saveSettings()">
-      <option value="">Auto (melhor pt-BR)</option>
-    </select>
-    <button class="cbtn" onclick="previewVoz()" style="margin-top:8px">▶ TESTAR VOZ</button>
-  </div>
-  <div class="cs">
-    <div class="ct">🧠 KIRA BRAIN</div>
-    <div id="brainst">—</div>
-    <button class="cbtn" onclick="exportBrain()">↓ EXPORTAR BRAIN.JSON</button>
-    <button class="cbtn red" style="margin-top:5px" onclick="resetBrain()">⚠ RESETAR BRAIN</button>
-  </div>
-  <div class="cs">
-    <div class="ct">📊 FIREBASE</div>
-    <div id="cfg-db" style="font-size:.46rem;color:rgba(236,72,153,.34);line-height:2;letter-spacing:.07em;white-space:pre-wrap;">—</div>
-    <button class="cbtn" style="margin-top:7px" onclick="reloadDB()">↻ RECARREGAR</button>
-  </div>
-</div>
 
 <script>
 'use strict';
 
 /* ══════════════════════════════════════════════
-   CONFIG
+   CHAVES — só Groq, Gemini é opcional via Config
 ══════════════════════════════════════════════ */
-const FB_CFG = {
-  apiKey:            'AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc',
-  authDomain:        'agroanalytics-api.firebaseapp.com',
-  projectId:         'agroanalytics-api',
-  storageBucket:     'agroanalytics-api.firebasestorage.app',
-  messagingSenderId: '739888244342',
-  appId:             '1:739888244342:web:558d620583469ec515e157'
+const GROQ_KEY  = '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';
+const FB_CONFIG = {
+    apiKey:            'AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc',
+    authDomain:        'agroanalytics-api.firebaseapp.com',
+    projectId:         'agroanalytics-api',
+    storageBucket:     'agroanalytics-api.firebasestorage.app',
+    messagingSenderId: '739888244342',
+    appId:             '1:739888244342:web:558d620583469ec515e157'
 };
-const GROQ = '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';
 const BKEY = 'kira_brain_v2';
-const HKEY = 'kira_hist';
+const HKEY = 'kira_history';
 
 /* ══════════════════════════════════════════════
-   ESTADO — variáveis simples, sem complexidade
+   ESTADO — idêntico ao original v7.5
 ══════════════════════════════════════════════ */
-let db = null, dbData = {}, dbReady = false;
-let micStream = null, audioCtx = null, analyser = null;
-let recorder = null, audioChunks = [];
-let isRecording = false, isThinking = false, isSpeaking = false;
-let continuousMode = false;
-let silenceStart = null, silCheckId = null, recStart = 0;
-let currentAudio = null;
-let curState = 'idle';
-let chatHist = [];
+let isRecording  = false;
+let isThinking   = false;
+let isSpeaking   = false;
+let isCalibrated = false;
+let continuousMode    = false;
+let silenceThreshold  = 10;
+let silenceStartTime  = null;
+
+let audioContext, analyser, dataArray, source, animationId;
+let mediaRecorder, audioChunks = [];
+let micStream, db, dbData = {}, currentAudio = null, startTime = 0;
+
+let chatHistory = JSON.parse(localStorage.getItem(HKEY) || '[]');
 
 /* ══════════════════════════════════════════════
    BRAIN
 ══════════════════════════════════════════════ */
 let brain = (function() {
-  try { const r = localStorage.getItem(BKEY); if (r) return JSON.parse(r); } catch(e) {}
-  return { v:2, created:new Date().toISOString(), interactions:0,
-    domain:{ machines:{}, operators:{} }, frequent_queries:[], insights:[] };
+    try { const r = localStorage.getItem(BKEY); if (r) return JSON.parse(r); } catch(e) {}
+    return { v:2, created:new Date().toISOString(), interactions:0,
+             domain:{ machines:{}, operators:{} }, frequent_queries:[], insights:[] };
 })();
 
 function saveBrain() {
-  brain.updated = new Date().toISOString();
-  try { localStorage.setItem(BKEY, JSON.stringify(brain)); } catch(e) {}
-  refreshBrainUI();
+    brain.updated = new Date().toISOString();
+    try { localStorage.setItem(BKEY, JSON.stringify(brain)); } catch(e) {}
+    refreshBrainUI();
 }
 
 function learnFromData(data) {
-  const today = new Date().toISOString().split('T')[0];
-  for (const [, rows] of Object.entries(data)) {
-    if (!Array.isArray(rows) || !rows.length) continue;
-    const keys = Object.keys(rows[0]);
-    const ci = keys.findIndex(k => /cod.*equip|colh|maq|harv|equip/i.test(k));
-    const pi = keys.findIndex(k => /peso|ton|weight/i.test(k));
-    const di = keys.findIndex(k => /^dat|data|date/i.test(k));
-    const oi = keys.findIndex(k => /oper|motorist|driver/i.test(k));
-    if (ci >= 0) {
-      const g = {};
-      rows.forEach(r => {
-        const cod = String(r[keys[ci]] || '').trim();
-        if (!cod) return;
-        if (!g[cod]) g[cod] = { tons:0, dates:new Set() };
-        if (pi >= 0) { const v = parseFloat(String(r[keys[pi]]||'').replace(',','.')); if(!isNaN(v)) g[cod].tons += v; }
-        if (di >= 0) g[cod].dates.add(String(r[keys[di]]).split(' ')[0]);
-      });
-      for (const [cod, info] of Object.entries(g)) {
-        if (!brain.domain.machines[cod])
-          brain.domain.machines[cod] = { cod, tmd_hist:[], total_ton:0, mentions:0, last_seen:today };
-        const m = brain.domain.machines[cod];
-        m.total_ton = info.tons; m.mentions++; m.last_seen = today;
-        if (info.tons > 0 && info.dates.size > 0) {
-          const tmd = info.tons / info.dates.size;
-          m.tmd_hist = [...m.tmd_hist, {v:+tmd.toFixed(1), d:today}].slice(-30);
-          m.tmd_medio = +(m.tmd_hist.reduce((a,x) => a+x.v, 0) / m.tmd_hist.length).toFixed(1);
+    const today = new Date().toISOString().split('T')[0];
+    for (const [, rows] of Object.entries(data)) {
+        if (!Array.isArray(rows) || !rows.length) continue;
+        const keys = Object.keys(rows[0]);
+        const ci = keys.findIndex(k => /cod.*equip|colh|maq|harv|equip/i.test(k));
+        const pi = keys.findIndex(k => /peso|ton|weight/i.test(k));
+        const di = keys.findIndex(k => /^dat|data|date/i.test(k));
+        const oi = keys.findIndex(k => /oper|motorist|driver/i.test(k));
+        if (ci >= 0) {
+            const g = {};
+            rows.forEach(r => {
+                const cod = String(r[keys[ci]]||'').trim(); if(!cod) return;
+                if (!g[cod]) g[cod]={tons:0,dates:new Set()};
+                if (pi>=0){const v=parseFloat(String(r[keys[pi]]||'').replace(',','.'));if(!isNaN(v))g[cod].tons+=v;}
+                if (di>=0) g[cod].dates.add(String(r[keys[di]]).split(' ')[0]);
+            });
+            for (const [cod,info] of Object.entries(g)) {
+                if (!brain.domain.machines[cod])
+                    brain.domain.machines[cod]={cod,tmd_hist:[],total_ton:0,mentions:0,last_seen:today};
+                const m = brain.domain.machines[cod];
+                m.total_ton=info.tons; m.mentions++; m.last_seen=today;
+                if (info.tons>0 && info.dates.size>0) {
+                    const tmd=info.tons/info.dates.size;
+                    m.tmd_hist=[...m.tmd_hist,{v:+tmd.toFixed(1),d:today}].slice(-30);
+                    m.tmd_medio=+(m.tmd_hist.reduce((a,x)=>a+x.v,0)/m.tmd_hist.length).toFixed(1);
+                }
+            }
         }
-      }
+        if (oi>=0) {
+            rows.forEach(r=>{
+                const op=String(r[keys[oi]]||'').trim(); if(!op||op.length<2) return;
+                if(!brain.domain.operators[op]) brain.domain.operators[op]={total_ton:0,mentions:0,last_seen:today};
+                brain.domain.operators[op].mentions++;
+                if(pi>=0){const v=parseFloat(String(r[keys[pi]]||'').replace(',','.'));if(!isNaN(v))brain.domain.operators[op].total_ton+=v;}
+            });
+        }
     }
-    if (oi >= 0) {
-      rows.forEach(r => {
-        const op = String(r[keys[oi]]||'').trim();
-        if (!op || op.length < 2) return;
-        if (!brain.domain.operators[op])
-          brain.domain.operators[op] = { total_ton:0, mentions:0, last_seen:today };
-        brain.domain.operators[op].mentions++;
-        if (pi >= 0) { const v = parseFloat(String(r[keys[pi]]||'').replace(',','.')); if(!isNaN(v)) brain.domain.operators[op].total_ton += v; }
-      });
+    // Insights automáticos
+    const ms = Object.values(brain.domain.machines).filter(m=>m.tmd_medio>0).sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0));
+    if (ms.length) {
+        const avg = ms.reduce((a,m)=>a+(m.tmd_medio||0),0)/ms.length;
+        brain.insights = [
+            {text:`Colhedora ${ms[0].cod} lidera TMD ${ms[0].tmd_medio} t/dia`},
+            {text:`TMD médio frota: ${avg.toFixed(1)} t/dia (${ms.length} máquinas)`}
+        ];
     }
-  }
-  genInsights(); saveBrain();
-}
-
-function genInsights() {
-  const ms = Object.values(brain.domain.machines)
-    .filter(m => m.tmd_medio > 0).sort((a,b) => (b.tmd_medio||0)-(a.tmd_medio||0));
-  if (!ms.length) return;
-  const avg = ms.reduce((a,m) => a+(m.tmd_medio||0), 0) / ms.length;
-  const below = ms.filter(m => m.tmd_medio < avg * 0.8);
-  brain.insights = [
-    { text:`Colhedora ${ms[0].cod} lidera com TMD ${ms[0].tmd_medio} t/dia` },
-    { text:`TMD médio da frota: ${avg.toFixed(1)} t/dia (${ms.length} máquinas)` },
-    ...(below.length ? [{ text:`${below.length} máquina(s) abaixo de 80% da média` }] : [])
-  ];
-}
-
-function learnInteraction(q, a) {
-  brain.interactions++;
-  const k = q.toLowerCase().replace(/\d+/g,'#').trim().slice(0,80);
-  const ex = brain.frequent_queries.find(x => x.p === k);
-  if (ex) { ex.n++; ex.last = a.slice(0,100); }
-  else brain.frequent_queries.unshift({ p:k, n:1, last:a.slice(0,100) });
-  brain.frequent_queries = brain.frequent_queries.sort((a,b) => b.n-a.n).slice(0,30);
-  saveBrain();
+    saveBrain();
 }
 
 function refreshBrainUI() {
-  const el = document.getElementById('brainst'); if (!el) return;
-  el.textContent =
-    `Interações: ${brain.interactions}\n` +
-    `Máquinas: ${Object.keys(brain.domain.machines).length}\n` +
-    `Insights: ${brain.insights.length}\n` +
-    `Atualizado: ${(brain.updated||'').split('T')[0]||'—'}`;
+    const el = document.getElementById('brain-st'); if(!el) return;
+    el.textContent =
+        `Interações: ${brain.interactions}\n` +
+        `Máquinas: ${Object.keys(brain.domain.machines).length}\n` +
+        `Insights: ${brain.insights.length}\n` +
+        `Atualizado: ${(brain.updated||'').split('T')[0]||'—'}`;
 }
-function resetBrain() {
-  if (!confirm('Resetar o brain?')) return;
-  localStorage.removeItem(BKEY);
-  location.reload();
-}
+function resetBrain()  { if(!confirm('Resetar brain?')) return; localStorage.removeItem(BKEY); location.reload(); }
 function exportBrain() {
-  const b = new Blob([JSON.stringify(brain,null,2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(b);
-  a.download = 'kira_brain_' + new Date().toISOString().split('T')[0] + '.json';
-  a.click(); URL.revokeObjectURL(a.href);
+    const b=new Blob([JSON.stringify(brain,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(b);
+    a.download='kira_brain_'+new Date().toISOString().split('T')[0]+'.json';
+    a.click();URL.revokeObjectURL(a.href);
 }
 
 /* ══════════════════════════════════════════════
-   WAVEFORM
+   CANVAS VISUALIZER — exatamente do original
 ══════════════════════════════════════════════ */
-const wC = document.getElementById('wc'), wX = wC.getContext('2d');
-let wW=0, wH=0, wcx=0, wcy=0, orbR=0;
-const BARS=64, PHS=Array.from({length:64}, ()=>Math.random()*Math.PI*2);
-let wt=0;
-const SCOL = { idle:[236,72,153], listen:[56,189,248], think:[167,139,250], speak:[45,212,191] };
+const orbContainer  = document.getElementById('orb-container');
+const subtitleEl    = document.getElementById('subtitle');
+const subtitleText  = document.getElementById('st-text');
+const chatLog       = document.getElementById('chat-log');
+const canvas        = document.getElementById('visualizer');
+const ctx           = canvas.getContext('2d');
+const calBar        = document.getElementById('calibration-bar');
+const calMsg        = document.getElementById('cal-msg');
+const micMeter      = document.getElementById('mic-meter-fill');
+canvas.width = 300; canvas.height = 300;
 
-function resW() {
-  const s = document.getElementById('stage').getBoundingClientRect();
-  const d = window.devicePixelRatio||1;
-  wC.width=s.width*d; wC.height=s.height*d;
-  wC.style.width=s.width+'px'; wC.style.height=s.height+'px';
-  wX.setTransform(1,0,0,1,0,0); wX.scale(d,d);
-  wW=s.width; wH=s.height; wcx=wW/2; wcy=wH/2;
-  orbR = document.getElementById('orb').getBoundingClientRect().width/2+16;
+function addToLog(msg, type='system') {
+    const time = new Date().toLocaleTimeString('pt-BR');
+    const p = document.createElement('div'); p.className='log-line';
+    const colors = { user:'color:#38bdf8', kira:'color:#ec4899', system:'color:rgba(180,170,200,.4)', error:'color:#ff5555' };
+    p.innerHTML = `<span style="font-weight:700;font-size:.75em;${colors[type]||colors.system}">[${time}] ${type.toUpperCase()}:</span> <span>${msg.slice(0,200)}</span>`;
+    chatLog.appendChild(p);
+    chatLog.scrollTop = chatLog.scrollHeight;
 }
-window.addEventListener('resize', resW);
 
-function drawW() {
-  requestAnimationFrame(drawW);
-  if (!wW) { resW(); return; }
-  wX.clearRect(0,0,wW,wH); wt+=.022;
-  const fft = new Uint8Array(analyser ? analyser.frequencyBinCount : 0);
-  if (analyser) analyser.getByteFrequencyData(fft);
-  const [r,g,b] = SCOL[curState] || SCOL.idle;
-  for (let i=0; i<BARS; i++) {
-    const ang = (i/BARS)*Math.PI*2 - Math.PI/2;
-    let amp = 0;
-    switch(curState) {
-      case 'listen': if(analyser){const x=Math.floor((i/BARS)*fft.length*.65);amp=(fft[x]/255)*50;}break;
-      case 'speak':  amp=5+Math.abs(Math.sin(wt*2.5+PHS[i]+i*.2))*28+Math.abs(Math.sin(wt*5+i*.45))*13;break;
-      case 'think':  amp=3+Math.abs(Math.sin(wt*1.5+PHS[i]+i*.15))*18+Math.abs(Math.sin(wt*3.5+i*.3))*7;break;
-      default:       amp=1.5+Math.abs(Math.sin(wt*.6+PHS[i]+i*.05))*4;
+function drawVisualizer() {
+    animationId = requestAnimationFrame(drawVisualizer);
+    if (!analyser) return;
+    analyser.getByteFrequencyData(dataArray);
+
+    let sum = 0;
+    for (let i=0; i<dataArray.length; i++) sum += dataArray[i];
+    const avg = sum / dataArray.length;
+    micMeter.style.width = Math.min(100,(avg*4))+'%';
+
+    if (isRecording && continuousMode) {
+        if (avg < silenceThreshold) {
+            if (!silenceStartTime) silenceStartTime = Date.now();
+            if (Date.now()-silenceStartTime > 800) handleEnd();
+        } else { silenceStartTime = null; }
     }
-    const ir=orbR+3, or2=orbR+3+Math.max(1.5,amp);
-    wX.strokeStyle=`rgba(${r},${g},${b},${curState==='idle'?.22:.58})`;
-    wX.lineWidth=curState==='idle'?1:1.6; wX.lineCap='round';
-    wX.beginPath();
-    wX.moveTo(wcx+Math.cos(ang)*ir, wcy+Math.sin(ang)*ir);
-    wX.lineTo(wcx+Math.cos(ang)*or2, wcy+Math.sin(ang)*or2);
-    wX.stroke();
-  }
-  const g2=wX.createRadialGradient(wcx,wcy,orbR-8,wcx,wcy,orbR+9);
-  g2.addColorStop(0,`rgba(${r},${g},${b},.12)`);g2.addColorStop(1,`rgba(${r},${g},${b},0)`);
-  wX.fillStyle=g2; wX.beginPath(); wX.arc(wcx,wcy,orbR+9,0,Math.PI*2); wX.fill();
-}
-requestAnimationFrame(drawW);
 
-/* ══════════════════════════════════════════════
-   ESTADO VISUAL
-══════════════════════════════════════════════ */
-const SLBL = { idle:'AGUARDANDO', listen:'OUVINDO', think:'PROCESSANDO', speak:'FALANDO' };
-function setState(s) {
-  curState=s;
-  const cls = { idle:'', listen:'sl', think:'st', speak:'ss' };
-  document.body.className = cls[s]||'';
-  document.getElementById('slbl').textContent = SLBL[s]||'AGUARDANDO';
-}
-function setSub(t, keep=false) {
-  const el=document.getElementById('sub');
-  if (!t) { el.style.opacity='0'; return; }
-  el.textContent=t; el.style.opacity='1';
-  clearTimeout(el._t);
-  if (!keep) el._t=setTimeout(()=>{el.style.opacity='0';}, 7000);
-}
-function setInit(msg, pct) {
-  const m=document.getElementById('imsg'), b=document.getElementById('ipb'), r=document.getElementById('irf');
-  if (m) m.textContent=msg;
-  if (b) b.style.width=pct+'%';
-  if (r) r.style.strokeDashoffset=(440*(1-pct/100)).toFixed(1);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const center=canvas.width/2, radius=isRecording?72:64, bars=50;
+    for (let i=0; i<bars; i++) {
+        const barHeight = (isRecording||isThinking||isSpeaking) ? (dataArray[i]/2.5) : (avg/15+1.5);
+        const rads=(Math.PI*2)/bars;
+        const x  =center+Math.cos(rads*i)*radius,       y  =center+Math.sin(rads*i)*radius;
+        const xe =center+Math.cos(rads*i)*(radius+barHeight), ye=center+Math.sin(rads*i)*(radius+barHeight);
+        let hue=320;
+        if (isThinking) hue=270;
+        if (isSpeaking) hue=160;
+        if (isRecording) hue=200;
+        ctx.strokeStyle=`hsla(${hue},80%,60%,${0.3+barHeight/70})`;
+        ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(xe,ye); ctx.stroke();
+    }
 }
 
 /* ══════════════════════════════════════════════
-   FIREBASE — inicia automático ao abrir a página
+   SYNC FIREBASE — igual ao original
+   Firebase já está no escopo global via script tags
 ══════════════════════════════════════════════ */
-function startFirebase() {
-  setInit('Aguardando Firebase SDK…', 8);
-
-  /* Poll até firebase estar disponível (scripts carregam como tags) */
-  let tries = 60; /* 60×250ms = 15s */
-  function poll() {
-    if (typeof firebase !== 'undefined' && typeof firebase.initializeApp === 'function') {
-      doInit();
-    } else if (tries-- > 0) {
-      setTimeout(poll, 250);
-    } else {
-      setInit('Firebase indisponível — dados locais apenas', 100);
-      setTimeout(readyToStart, 500);
-    }
-  }
-
-  function doInit() {
-    try {
-      if (!firebase.apps || firebase.apps.length === 0) firebase.initializeApp(FB_CFG);
-      db = firebase.firestore();
-      setInit('Firebase OK. Autenticando…', 18);
-      document.getElementById('cnd').classList.add('ok');
-      document.getElementById('cnt').textContent = 'ONLINE';
-      firebase.auth().signInAnonymously()
-        .then(() => { setInit('Carregando tabelas…', 28); loadData(); })
-        .catch(e => { console.warn('[K] auth:', e.code); loadData(); });
-    } catch(e) {
-      console.error('[K] Firebase init:', e.message);
-      setInit('Erro Firebase — continuando', 100);
-      setTimeout(readyToStart, 500);
-    }
-  }
-
-  poll();
-  setTimeout(() => { if (!dbReady) { setInit('Timeout — continuando', 100); readyToStart(); } }, 20000);
-}
-
 function parseFBDoc(doc) {
-  try {
-    if (!doc.exists) return [];
-    const d = doc.data();
-    if (d.payload) { const {cab,rows}=JSON.parse(d.payload); return rows.map(r=>Object.fromEntries(cab.map((c,i)=>[c,r[i]??'']))); }
-    if (d.rows && d.columns) return d.rows.map(r=>Object.fromEntries(d.columns.map((c,i)=>[c,r[i]??''])));
-    if (Array.isArray(d.data)) return d.data;
-    return [d];
-  } catch(e) { return []; }
-}
-
-function loadData() {
-  if (!db) { readyToStart(); return; }
-  let done=0, total=1;
-
-  function tick(name, count) {
-    done++;
-    const pct = 28 + Math.min(58, Math.floor((done/Math.max(total,1))*58));
-    setInit(`${name}: ${count} reg`, pct);
-    updateDBCount();
-  }
-
-  /* Toda a coleção snapshots */
-  db.collection('snapshots').onSnapshot(snap => {
-    total = Math.max(total, snap.size || 1);
-    snap.forEach(doc => {
-      const rows = parseFBDoc(doc);
-      if (rows.length) { dbData[doc.id]=rows; tick(doc.id, rows.length); addLog('snapshots/'+doc.id+': '+rows.length,'sys'); }
-    });
-    if (!dbReady) checkDone();
-  }, err => {
-    console.warn('[K] snapshots:', err.code);
-    /* Fallback individual */
-    const NAMES = ['producao','acmSafra','metas','colheita','patio','pesagem',
-                   'transporte','frentes','operadores','equipamentos','diario','turno'];
-    total = NAMES.length;
-    NAMES.forEach(n => {
-      db.collection('snapshots').doc(n).onSnapshot(
-        doc => { if(doc.exists){dbData[n]=parseFBDoc(doc);tick(n,dbData[n].length);}else done++; checkDone(); },
-        () => { done++; checkDone(); }
-      );
-    });
-  });
-
-  /* Coleções raiz */
-  ['viagens','producao','colheita','patio','pesagens','frentes','equipamentos',
-   'operadores','metas','turnos','diario','controle','acmSafra'].forEach(col => {
-    db.collection(col).limit(800).onSnapshot(
-      s => { if(!s.empty){dbData['_'+col]=s.docs.map(d=>({_id:d.id,...d.data()}));updateDBCount();} }, ()=>{}
-    );
-  });
-
-  function checkDone() { if (done>=total && !dbReady) finishData(); }
-  setTimeout(() => { if (!dbReady) finishData(); }, 12000);
-
-  function finishData() {
-    const tot = Object.values(dbData).flat().length;
-    setInit(`✓ ${tot.toLocaleString('pt-BR')} registros. Aprendendo…`, 92);
-    learnFromData(dbData); updateDBCount();
-    setTimeout(readyToStart, 500);
-  }
-}
-
-function updateDBCount() {
-  const tot = Object.values(dbData).flat().length;
-  const el = document.getElementById('dbi'); if(el) el.textContent='DB: '+tot.toLocaleString('pt-BR')+' reg';
-  refreshCfgDB();
-}
-function refreshCfgDB() {
-  const el = document.getElementById('cfg-db'); if(!el) return;
-  el.textContent = Object.entries(dbData)
-    .filter(([,v])=>Array.isArray(v)&&v.length>0)
-    .map(([k,v])=>k.replace(/^_/,'')+': '+v.length.toLocaleString('pt-BR')+' reg')
-    .join('\n') || 'Sem dados';
-}
-function reloadDB() { dbData={}; if(db) loadData(); }
-
-/* Dados prontos — mostra botão de iniciar */
-function readyToStart() {
-  if (dbReady) return;
-  dbReady = true;
-  setInit('Pronto. Toque para iniciar.', 100);
-  document.getElementById('init-btn').classList.add('show');
-}
-
-/* ══════════════════════════════════════════════
-   HANDSHAKE — único clique que pede mic
-   Só acontece UMA VEZ, depois da tela de boot
-══════════════════════════════════════════════ */
-async function handshake() {
-  const btn  = document.getElementById('init-btn');
-  const errEl = document.getElementById('ierr');
-
-  btn.textContent = '⏳ Aguardando…';
-  btn.style.opacity = '.5';
-  btn.style.pointerEvents = 'none';
-  errEl.style.display = 'none';
-
-  try {
-    /* Pede microfone UMA VEZ aqui — nunca mais */
-    micStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
-
-    /* Web Audio para visualização */
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    analyser  = audioCtx.createAnalyser();
-    analyser.fftSize = 256; analyser.smoothingTimeConstant = .76;
-    audioCtx.createMediaStreamSource(micStream).connect(analyser);
-
-    /* Fecha tela de init */
-    const init = document.getElementById('init');
-    init.classList.add('out');
-    setTimeout(() => { init.classList.add('gone'); resW(); }, 700);
-
-    /* Espera vozes e faz saudação */
-    await waitVoices();
-    const h = new Date().getHours();
-    const sd = h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
-    const tot = Object.values(dbData).flat().length;
-    const mc  = Object.keys(brain.domain.machines).length;
-    const greet =
-      `${sd}! Kira operacional. ` +
-      (tot>0 ? `Analisei ${tot.toLocaleString('pt-BR')} registros e aprendi ${mc} máquinas. ` : '') +
-      'Pode falar.';
-
-    setState('speak'); setSub(greet, true);
-    addChat('kira', greet);
-    await speak(greet);
-    setState('idle'); setSub('');
-
-    /* Inicia modo mãos livres se ligado */
-    if (continuousMode) startRec();
-
-  } catch(err) {
-    console.error('[K] handshake:', err.name, err.message);
-    btn.textContent = '🎙 TENTAR NOVAMENTE';
-    btn.style.opacity = '1';
-    btn.style.pointerEvents = 'all';
-
-    let msg = '';
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      msg = '❌ Permissão negada.<br>Clique em 🔒 na barra do browser → Microfone → Permitir → Recarregue (F5).';
-    } else if (err.name === 'NotFoundError') {
-      msg = '❌ Nenhum microfone encontrado neste dispositivo.';
-    } else {
-      msg = '❌ ' + err.name + ': ' + err.message;
-    }
-    errEl.innerHTML = msg; errEl.style.display = 'block';
-  }
-}
-
-/* ══════════════════════════════════════════════
-   GRAVAÇÃO — MediaRecorder + Whisper
-   Microfone é desligado enquanto KIRA fala/pensa
-══════════════════════════════════════════════ */
-function getSupportedMime() {
-  const mimes = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
-  return mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
-}
-
-function startRec() {
-  if (!micStream || isRecording || isThinking || isSpeaking) return;
-  if (audioCtx?.state === 'suspended') audioCtx.resume();
-
-  /* Garante que mic está ligado */
-  micStream.getAudioTracks().forEach(t => { t.enabled = true; });
-
-  audioChunks = []; recStart = Date.now(); silenceStart = null;
-  isRecording = true;
-
-  recorder = new MediaRecorder(micStream, { mimeType: getSupportedMime() });
-  recorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
-  recorder.start(200);
-  setState('listen');
-  addLog('Gravando…','sys');
-
-  /* Detecção de silêncio em modo mãos livres */
-  if (continuousMode) {
-    clearInterval(silCheckId);
-    silCheckId = setInterval(() => {
-      if (!isRecording || !analyser) return;
-      const buf = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(buf);
-      const avg = buf.reduce((a,v)=>a+v,0) / buf.length;
-      const db  = 20 * Math.log10(avg/255 + 1e-6);
-      if (db < -44) {
-        if (!silenceStart) silenceStart = Date.now();
-        if (Date.now()-silenceStart > 900 && Date.now()-recStart > 500) {
-          clearInterval(silCheckId);
-          stopRec();
+    try {
+        if (!doc.exists) return [];
+        const d = doc.data();
+        if (d.payload) {
+            const {cab,rows} = JSON.parse(d.payload);
+            return rows.map(r=>Object.fromEntries(cab.map((c,i)=>[c,r[i]??''])));
         }
-      } else { silenceStart = null; }
-    }, 80);
-  }
+        if (d.rows && d.columns) return d.rows.map(r=>Object.fromEntries(d.columns.map((c,i)=>[c,r[i]??''])));
+        if (Array.isArray(d.data)) return d.data;
+        return [d];
+    } catch(e) { return []; }
 }
 
-function stopRec() {
-  if (!isRecording) return;
-  isRecording = false;
-  clearInterval(silCheckId);
-  if (recorder && recorder.state === 'recording') {
-    recorder.onstop = processAudio;
-    recorder.stop();
-  }
+function updateDBLabel() {
+    const tot = Object.values(dbData).flat().length;
+    const el = document.getElementById('db-info');
+    if (el) el.textContent = 'DB: '+tot.toLocaleString('pt-BR')+' reg';
+    const cdb = document.getElementById('cfg-db'); if(!cdb) return;
+    cdb.textContent = Object.entries(dbData)
+        .filter(([,v])=>Array.isArray(v)&&v.length>0)
+        .map(([k,v])=>k.replace(/^_/,'')+': '+v.length.toLocaleString('pt-BR')+' reg')
+        .join('\n')||'Sem dados';
 }
 
-async function processAudio() {
-  if (isThinking || isSpeaking) return;
+async function syncAgroAnalytics() {
+    calMsg.innerText = 'Conectando ao Firebase…';
+    calBar.style.width = '20%';
 
-  const blob = new Blob(audioChunks, { type: getSupportedMime() || 'audio/webm' });
-  if (blob.size < 1000 || Date.now()-recStart < 400) {
-    if (continuousMode && !isThinking && !isSpeaking) setTimeout(startRec, 600);
-    return;
-  }
+    try {
+        // Firebase já disponível via script tags síncronas
+        if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+        db = firebase.firestore();
 
-  isThinking = true;
-  /* Desliga mic durante processamento — evita capturar eco/ruído */
-  micStream.getAudioTracks().forEach(t => { t.enabled = false; });
-  setState('think'); setSub('…');
+        calMsg.innerText = 'Autenticando…';
+        calBar.style.width = '35%';
 
-  try {
-    /* 1. Transcrição Whisper */
-    const form = new FormData();
-    form.append('file', blob, 'audio.webm');
-    form.append('model', 'whisper-large-v3-turbo');
-    form.append('language', 'pt');
-    form.append('response_format', 'json');
+        try { await firebase.auth().signInAnonymously(); } catch(e) { console.warn('[K] auth:', e.code); }
 
-    const wRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method:'POST', headers:{'Authorization':'Bearer '+GROQ}, body:form
-    });
-    if (!wRes.ok) throw new Error('Whisper HTTP ' + wRes.status);
-    const wData = await wRes.json();
-    const texto = (wData.text||'').trim();
+        document.getElementById('status-dot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]';
+        document.getElementById('status-text').innerText = 'ONLINE';
+        calMsg.innerText = 'Carregando tabelas…';
+        calBar.style.width = '50%';
 
-    if (!texto || texto.length < 2) {
-      resetState(); return;
+        let done=0, total=1;
+        function tick(name,n) {
+            done++;
+            const pct=50+Math.min(40,Math.floor((done/Math.max(total,1))*40));
+            calBar.style.width=pct+'%';
+            calMsg.innerText=name+': '+n+' registros';
+            updateDBLabel();
+        }
+
+        // Tenta toda a coleção de uma vez (o mais eficiente)
+        db.collection('snapshots').onSnapshot(snap => {
+            total = Math.max(total,snap.size||1);
+            snap.forEach(doc=>{
+                const rows=parseFBDoc(doc);
+                if(rows.length){dbData[doc.id]=rows;tick(doc.id,rows.length);addToLog('snapshots/'+doc.id+': '+rows.length,'system');}
+            });
+            checkDone();
+        }, err=>{
+            console.warn('[K] snapshots listener:', err.code);
+            // Fallback: docs nomeados individualmente
+            const NAMES=['producao','acmSafra','metas','colheita','patio','pesagem',
+                         'transporte','frentes','operadores','equipamentos','diario','turno'];
+            total=NAMES.length;
+            NAMES.forEach(n=>{
+                db.collection('snapshots').doc(n).onSnapshot(
+                    doc=>{if(doc.exists){dbData[n]=parseFBDoc(doc);tick(n,dbData[n].length);}else done++;checkDone();},
+                    ()=>{done++;checkDone();}
+                );
+            });
+        });
+
+        // Coleções raiz em paralelo
+        ['viagens','producao','colheita','patio','pesagens','frentes',
+         'equipamentos','operadores','metas','turnos','diario','controle','acmSafra'].forEach(col=>{
+            db.collection(col).limit(800).onSnapshot(
+                s=>{if(!s.empty){dbData['_'+col]=s.docs.map(d=>({_id:d.id,...d.data()}));updateDBLabel();}},()=>{}
+            );
+        });
+
+        function checkDone() {
+            if (done >= total) {
+                const tot=Object.values(dbData).flat().length;
+                calBar.style.width='90%';
+                calMsg.innerText='✓ '+tot.toLocaleString('pt-BR')+' registros. Aprendendo…';
+                learnFromData(dbData);
+                setTimeout(()=>{
+                    calBar.style.width='100%';
+                    calMsg.innerText='Pronto — toque para iniciar.';
+                    document.getElementById('btn-init').style.display='block';
+                }, 500);
+            }
+        }
+        // Garante que o botão aparece mesmo se alguns listeners não responderem
+        setTimeout(()=>{
+            if (document.getElementById('btn-init').style.display==='none')
+                checkDone();
+        }, 12000);
+
+    } catch(err) {
+        console.error('[K] sync:', err.message);
+        calMsg.innerText = 'Firebase indisponível — clique para continuar';
+        calBar.style.width = '100%';
+        document.getElementById('btn-init').style.display = 'block';
     }
-
-    addLog(texto, 'user'); addChat('user', texto); setSub('"'+texto+'"');
-
-    /* 2. LLM */
-    const resp = await askGroq(texto);
-    const clean = parseCards(resp);
-    addLog(clean, 'kira'); addChat('kira', clean);
-    learnInteraction(texto, clean);
-
-    /* 3. Fala */
-    isThinking = false; isSpeaking = true;
-    setState('speak'); setSub(clean, true);
-    await speak(clean);
-
-  } catch(err) {
-    console.error('[K] processAudio:', err.message);
-    addLog('Erro: '+err.message, 'err');
-  }
-
-  resetState();
 }
 
-function resetState() {
-  isThinking = false; isSpeaking = false;
-  /* Religa microfone */
-  if (micStream) micStream.getAudioTracks().forEach(t => { t.enabled = true; });
-  setState('idle'); setSub('');
-  if (continuousMode) setTimeout(startRec, 600);
-}
+function reloadDB() { dbData={}; syncAgroAnalytics(); }
 
 /* ══════════════════════════════════════════════
-   ORB TAP — toggle gravação
+   BOTÃO INICIAR — único clique que pede mic
+   Estrutura IDÊNTICA ao original v7.5
 ══════════════════════════════════════════════ */
-function orbClick() {
-  if (!micStream) return; /* Ainda na tela de init */
-  if (isThinking || isSpeaking) return;
-  if (isRecording) stopRec();
-  else startRec();
-}
+document.getElementById('btn-init').onclick = async () => {
+    const btn = document.getElementById('btn-init');
+    btn.style.display = 'none';
+    document.getElementById('mic-tip').style.display = 'none';
 
-function toggleHF() {
-  continuousMode = document.getElementById('hft').checked;
-  if (!micStream) { document.getElementById('hft').checked=false; continuousMode=false; return; }
-  if (continuousMode && !isRecording && !isThinking && !isSpeaking) startRec();
-  else if (!continuousMode && isRecording) stopRec();
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        micStream    = await navigator.mediaDevices.getUserMedia({ audio: true });
+        analyser     = audioContext.createAnalyser();
+        analyser.fftSize  = 128;
+        dataArray         = new Uint8Array(analyser.frequencyBinCount);
+        source            = audioContext.createMediaStreamSource(micStream);
+        source.connect(analyser);
+
+        // Fecha overlay — igual ao original
+        const overlay = document.getElementById('calibration-overlay');
+        overlay.classList.add('opacity-0');
+        setTimeout(()=>overlay.style.display='none', 500);
+
+        isCalibrated = true;
+        drawVisualizer();
+
+        // Aguarda vozes e faz saudação
+        await waitVoices();
+        const h = new Date().getHours();
+        const sd = h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+        const tot = Object.values(dbData).flat().length;
+        const mc  = Object.keys(brain.domain.machines).length;
+        await speakKira(
+            sd+'. Kira operacional. '+
+            (tot>0?'Analisei '+tot.toLocaleString('pt-BR')+' registros e aprendi '+mc+' máquinas. ':'')+
+            'Pode falar, Senhor.'
+        );
+
+        if (continuousMode) handleStart();
+
+    } catch(err) {
+        console.error('[K] handshake:', err.name, err.message);
+        btn.style.display = 'block';
+        // Mostra dica específica para permissão negada
+        if (err.name==='NotAllowedError'||err.name==='PermissionDeniedError') {
+            document.getElementById('mic-tip').style.display = 'block';
+        }
+    }
+};
+
+/* ══════════════════════════════════════════════
+   GRAVAÇÃO — idêntico ao original
+══════════════════════════════════════════════ */
+const handleStart = async (e) => {
+    if (e && e.cancelable) e.preventDefault();
+    if (!isCalibrated || isThinking || isRecording || isSpeaking) return;
+
+    micStream.getAudioTracks()[0].enabled = true;
+    if (audioContext.state === 'suspended') await audioContext.resume();
+
+    startTime = Date.now(); silenceStartTime = null; audioChunks = [];
+    const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(m=>MediaRecorder.isTypeSupported(m))||'';
+    mediaRecorder = new MediaRecorder(micStream, mime?{mimeType:mime}:{});
+    mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+    mediaRecorder.start();
+    isRecording = true;
+
+    orbContainer.classList.add('listening');
+    subtitleEl.classList.remove('opacity-0');
+    subtitleText.innerText = 'ESCUTANDO…';
+};
+
+const handleEnd = async () => {
+    if (!isRecording) return;
+    isRecording = false;
+    orbContainer.classList.remove('listening');
+
+    mediaRecorder.onstop = async () => {
+        micStream.getAudioTracks()[0].enabled = false;
+        const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(m=>MediaRecorder.isTypeSupported(m))||'';
+        const blob = new Blob(audioChunks, { type: mime||'audio/webm' });
+        if (Date.now()-startTime<300 || blob.size<500) {
+            resetState();
+            if (continuousMode && !isSpeaking) setTimeout(handleStart,600);
+            return;
+        }
+        processBrain(blob);
+    };
+    mediaRecorder.stop();
+};
+
+orbContainer.addEventListener('mousedown', handleStart);
+window.addEventListener('mouseup', handleEnd);
+orbContainer.addEventListener('touchstart', e=>{e.preventDefault();handleStart(e);},{passive:false});
+orbContainer.addEventListener('touchend',   e=>{e.preventDefault();handleEnd(e);  },{passive:false});
+
+document.getElementById('continuous-toggle').onchange = (e) => {
+    continuousMode = e.target.checked;
+    if (continuousMode && isCalibrated && !isRecording && !isThinking && !isSpeaking) handleStart();
+};
+
+/* ══════════════════════════════════════════════
+   PROCESS BRAIN — Whisper + Groq + Speak
+══════════════════════════════════════════════ */
+async function processBrain(blob) {
+    if (isThinking || isSpeaking) return;
+    isThinking = true;
+    const t0 = Date.now();
+    orbContainer.classList.add('thinking');
+    subtitleText.innerText = 'PROCESSANDO…';
+
+    try {
+        // 1. Transcrição Whisper
+        const form = new FormData();
+        form.append('file', blob, 'audio.webm');
+        form.append('model', 'whisper-large-v3-turbo');
+        form.append('language', 'pt');
+
+        const wRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method:'POST', headers:{'Authorization':'Bearer '+GROQ_KEY}, body:form
+        });
+        if (!wRes.ok) throw new Error('Whisper HTTP '+wRes.status);
+        const texto = ((await wRes.json()).text||'').trim();
+        if (!texto || texto.split(' ').length < 1) throw new Error('noise');
+
+        addToLog(texto, 'user');
+        subtitleText.innerText = '"'+texto+'"';
+
+        // 2. LLM Groq
+        const reply = await askGroq(texto);
+        const clean = parseCards(reply);
+
+        addToLog(clean, 'kira');
+        addToLog('Latência: '+(Date.now()-t0)+'ms', 'system');
+
+        // Aprende interação
+        brain.interactions++;
+        const k=texto.toLowerCase().replace(/\d+/g,'#').slice(0,80);
+        const ex=brain.frequent_queries.find(x=>x.p===k);
+        if(ex){ex.n++;ex.last=clean.slice(0,100);}
+        else brain.frequent_queries.unshift({p:k,n:1,last:clean.slice(0,100)});
+        brain.frequent_queries=brain.frequent_queries.sort((a,b)=>b.n-a.n).slice(0,30);
+        saveBrain();
+
+        // 3. Fala
+        await speakKira(clean);
+
+    } catch(err) {
+        console.error('[K] processBrain:', err.message);
+        addToLog('Erro: '+err.message, 'error');
+        resetState();
+        if (continuousMode) setTimeout(handleStart, 800);
+    }
 }
 
 /* ══════════════════════════════════════════════
    GROQ LLM
 ══════════════════════════════════════════════ */
 async function askGroq(query) {
-  const ctx = buildCtx(query);
-  const topM = Object.values(brain.domain.machines)
-    .sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0)).slice(0,5)
-    .map(m=>`${m.cod}: TMD=${m.tmd_medio||'?'} t/dia, total=${(m.total_ton||0).toFixed(0)} t`).join('\n');
-  const insStr = brain.insights.slice(0,4).map(i=>'• '+i.text).join('\n');
+    const topM = Object.values(brain.domain.machines)
+        .sort((a,b)=>(b.tmd_medio||0)-(a.tmd_medio||0)).slice(0,5)
+        .map(m=>`${m.cod}: TMD=${m.tmd_medio||'?'} t/dia, total=${(m.total_ton||0).toFixed(0)} t`).join('\n');
+    const insStr = brain.insights.slice(0,3).map(i=>'• '+i.text).join('\n');
+    const histCtx = chatHistory.map(h=>(h.role==='user'?'Senhor':'Kira')+': '+h.content).join('\n');
+    const ctx = buildContext(query);
 
-  const sys =
-`Você é Kira, assistente de análise agrícola da AgroAnalytics, Usina Pitangueiras.
+    const sys =
+`Você é Kira, Secretária Executiva Sênior da AgroAnalytics, Usina Pitangueiras.
 
-PERSONALIDADE:
-- Direta, precisa, como colega de confiança
-- Resposta curta para pergunta simples (máx 15 palavras faladas)
-- Detalhada quando pedirem análise
-- Sem "Com certeza!" ou papo furado — vai direto
-- Para voz: sem markdown, sem asteriscos, linguagem oral
-- Use {{CARD:TÍTULO|VALOR|UNIDADE}} para métricas importantes
+IDENTIDADE: Séria, precisa, elegante. Trate como "Senhor".
+RESPOSTA: Máximo 15 palavras para perguntas simples. Para análises, seja detalhada.
+TTS: Sem markdown, sem asteriscos. Linguagem oral natural.
+CARDS: Use {{CARD:TÍTULO|VALOR|UNIDADE}} para métricas solicitadas.
 
-DOMÍNIO:
-- TMD = Toneladas por Máquina por Dia = total_toneladas ÷ dias_únicos_de_operação
-- TMS = Toneladas Métricas de Sacarose
-- TCH = Toneladas de Cana por Hectare
-- ATR = Açúcar Total Recuperável
-- Disponibilidade mecânica = % do tempo operando
+DOMÍNIO: TMD=Ton/Máquina/Dia, TMS=Ton.Métricas.Sacarose, TCH=Ton.Cana/Hectare, ATR=Açúcar Total Recuperável
 
-BRAIN (aprendizado acumulado):
-${insStr || 'Ainda aprendendo.'}
+KIRA BRAIN:
+${insStr||'Aprendendo…'}
 TOP MÁQUINAS:
-${topM || 'Sem dados suficientes ainda.'}
+${topM||'Sem dados.'}
 
-DADOS FIREBASE (${Object.keys(dbData).length} tabelas disponíveis):
+HISTÓRICO: ${histCtx||'(início da conversa)'}
+
+DADOS FIREBASE (${Object.keys(dbData).length} tabelas):
 ${ctx}
 
-HORA ATUAL: ${new Date().toLocaleString('pt-BR')}
+HORA: ${new Date().toLocaleString('pt-BR')}
 
-COMO ANALISAR:
-- "Qual colhedora mais colheu?" → agrupe por código de equipamento, some toneladas, retorne o maior
-- "TMD de tal máquina?" → some toneladas dela ÷ dias únicos que operou
-- "Resultado de tal data?" → filtre registros por essa data
-- Use SEMPRE os números reais dos dados acima, nunca invente`;
+ANÁLISE: Use os dados reais acima. Nunca invente números.
+Para TMD: some toneladas ÷ dias únicos de operação.
+Para "máquina que mais colheu": agrupe por código, some toneladas.`;
 
-  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method:'POST',
-    headers:{'Authorization':'Bearer '+GROQ,'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model:'llama-3.3-70b-versatile',
-      messages:[{role:'system',content:sys},...chatHist.slice(-8),{role:'user',content:query}],
-      max_tokens:500, temperature:.72
-    })
-  });
-  if (!r.ok) throw new Error('Groq HTTP ' + r.status);
-  const ans = (await r.json()).choices[0].message.content;
-  chatHist.push({role:'user',content:query},{role:'assistant',content:ans});
-  if (chatHist.length > 20) chatHist = chatHist.slice(-20);
-  try { localStorage.setItem(HKEY, JSON.stringify(chatHist)); } catch(e) {}
-  return ans;
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+GROQ_KEY,'Content-Type':'application/json'},
+        body: JSON.stringify({
+            model:'llama-3.3-70b-versatile',
+            messages:[{role:'system',content:sys},{role:'user',content:query}],
+            max_tokens:400, temperature:.72
+        })
+    });
+    if (!r.ok) throw new Error('Groq HTTP '+r.status);
+    const ans = (await r.json()).choices[0].message.content;
+    chatHistory.push({role:'user',content:query},{role:'assistant',content:ans});
+    if (chatHistory.length>16) chatHistory=chatHistory.slice(-16);
+    try{localStorage.setItem(HKEY,JSON.stringify(chatHistory));}catch(e){}
+    return ans;
 }
 
-function buildCtx(query) {
-  const ql = query.toLowerCase();
-  const pri = [];
-  if (/colh|harv|maq|equip|tmd/i.test(ql)) pri.push('producao','colheita','_producao','_colheita');
-  if (/safra|acm|acumul/i.test(ql))        pri.push('acmSafra');
-  if (/meta|objetivo/i.test(ql))           pri.push('metas');
-  if (/pati|recep/i.test(ql))              pri.push('patio','_patio');
-  if (/oper|motorist/i.test(ql))           pri.push('operadores','_operadores');
-  const ctx={}, added=new Set();
-  for (const k of pri) {
-    if (dbData[k]?.length) { ctx[k]={total:dbData[k].length,dados:dbData[k].slice(0,300)}; added.add(k); }
-  }
-  for (const [k,v] of Object.entries(dbData)) {
-    if (added.has(k)||!Array.isArray(v)||!v.length) continue;
-    ctx[k]={total:v.length,amostra:v.slice(0,30),colunas:Object.keys(v[0]||{})};
-  }
-  return JSON.stringify(ctx);
+function buildContext(query) {
+    const ql=query.toLowerCase();
+    const pri=[];
+    if(/colh|harv|maq|equip|tmd/i.test(ql))  pri.push('producao','colheita','_producao','_colheita');
+    if(/safra|acm|acumul/i.test(ql))          pri.push('acmSafra');
+    if(/meta|objetivo/i.test(ql))             pri.push('metas');
+    if(/pati|recep/i.test(ql))                pri.push('patio','_patio');
+    if(/oper|motorist/i.test(ql))             pri.push('operadores','_operadores');
+    const ctx={},added=new Set();
+    for(const k of pri){if(dbData[k]?.length){ctx[k]={total:dbData[k].length,dados:dbData[k].slice(0,300)};added.add(k);}}
+    for(const[k,v]of Object.entries(dbData)){
+        if(added.has(k)||!Array.isArray(v)||!v.length)continue;
+        ctx[k]={total:v.length,amostra:v.slice(0,30),colunas:Object.keys(v[0]||{})};
+    }
+    return JSON.stringify(ctx);
 }
 
 /* ══════════════════════════════════════════════
-   TTS — Gemini + Browser fallback
+   SPEAK — Gemini TTS (se tiver key) + browser
 ══════════════════════════════════════════════ */
 function waitVoices() {
-  return new Promise(res => {
-    if (!window.speechSynthesis) { res(); return; }
-    if (window.speechSynthesis.getVoices().length > 0) { res(); return; }
-    let done=false;
-    const fin=()=>{ if(!done){done=true;res();} };
-    window.speechSynthesis.onvoiceschanged=fin;
-    setTimeout(fin, 2500);
-  });
+    return new Promise(res=>{
+        if(!window.speechSynthesis){res();return;}
+        if(window.speechSynthesis.getVoices().length>0){res();return;}
+        let done=false; const fin=()=>{if(!done){done=true;res();}};
+        window.speechSynthesis.onvoiceschanged=fin; setTimeout(fin,2500);
+    });
 }
 
-async function speak(text) {
-  const clean = text.replace(/\{\{CARD:[^}]+\}\}/g,'').replace(/[*#_◆▶⬡\[\]]/g,'').trim();
-  if (!clean) return;
-  const gk = localStorage.getItem('kira_gem')||'';
-  if (gk) { const ok=await speakGemini(clean,gk); if(ok) return; }
-  await speakBrowser(clean);
+async function speakKira(text) {
+    if (isSpeaking) return;
+    isSpeaking=true; isThinking=false;
+    orbContainer.classList.remove('thinking');
+    orbContainer.classList.add('speaking');
+    addToLog(text,'kira');
+    subtitleText.innerText = text;
+    subtitleEl.classList.remove('opacity-0');
+
+    const clean = text.replace(/\{\{CARD:[^}]+\}\}/g,'').replace(/[*#_◆▶\[\]]/g,'').trim();
+    const gk = localStorage.getItem('kira_gem')||'';
+
+    if (gk) {
+        const ok = await speakGemini(clean, gk);
+        if (ok) return; // speakGemini chama resetState no onended
+    }
+    await speakBrowser(clean);
+    resetState();
+    if (continuousMode) setTimeout(handleStart, 400);
 }
 
 async function speakGemini(text, key) {
-  const voice = localStorage.getItem('kira_gem_voice')||'Kore';
-  try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
-      { method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          contents:[{parts:[{text}]}],
-          generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}
-        }) }
-    );
-    if (!r.ok) return false;
-    const data = await r.json();
-    const part = data?.candidates?.[0]?.content?.parts?.[0];
-    if (!part?.inlineData?.data) return false;
-    const wav = pcmToWav(part.inlineData.data, parseInt(part.inlineData.mimeType?.split('rate=')[1])||24000);
-    return playBuf(wav);
-  } catch(e) { return false; }
-}
-
-function pcmToWav(b64, rate) {
-  const buf = Uint8Array.from(atob(b64), c=>c.charCodeAt(0)).buffer;
-  const hdr=new ArrayBuffer(44), v=new DataView(hdr);
-  v.setUint32(0,0x52494646,false);v.setUint32(4,36+buf.byteLength,true);
-  v.setUint32(8,0x57415645,false);v.setUint32(12,0x666d7420,false);
-  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
-  v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);
-  v.setUint16(32,2,true);v.setUint16(34,16,true);
-  v.setUint32(36,0x64617461,false);v.setUint32(40,buf.byteLength,true);
-  const out=new Uint8Array(hdr.byteLength+buf.byteLength);
-  out.set(new Uint8Array(hdr),0);out.set(new Uint8Array(buf),hdr.byteLength);
-  return out.buffer;
-}
-
-function playBuf(buf) {
-  return new Promise(res => {
-    if (currentAudio) { try{currentAudio.pause();}catch(e){} currentAudio=null; }
-    const url = URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
-    const a = new Audio(url); currentAudio=a;
-    const end = ok => { URL.revokeObjectURL(url); currentAudio=null; res(ok); };
-    a.onended=()=>end(true); a.onerror=()=>end(false);
-    a.play().catch(()=>end(false));
-    setTimeout(()=>{ try{a.pause();}catch(e){} end(true); }, 45000);
-  });
+    const voice = localStorage.getItem('kira_gem_voice')||'Kore';
+    try {
+        const r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
+            { method:'POST', headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({
+                contents:[{parts:[{text}]}],
+                generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}
+              }) }
+        );
+        if (!r.ok) return false;
+        const data = await r.json();
+        const part = data?.candidates?.[0]?.content?.parts?.[0];
+        if (!part?.inlineData?.data) return false;
+        const wav = pcmToWav(part.inlineData.data, parseInt(part.inlineData.mimeType?.split('rate=')[1])||24000);
+        if (currentAudio){try{currentAudio.pause();}catch(e){}currentAudio=null;}
+        if (audioContext.state==='suspended') await audioContext.resume();
+        const audio = new Audio(URL.createObjectURL(new Blob([wav],{type:'audio/wav'})));
+        currentAudio = audio;
+        await audio.play();
+        audio.onended = () => {
+            URL.revokeObjectURL(audio.src); currentAudio=null;
+            resetState();
+            if (continuousMode) setTimeout(handleStart,400);
+        };
+        return true;
+    } catch(e) { console.warn('[K] Gemini TTS:', e.message); return false; }
 }
 
 function speakBrowser(text) {
-  return new Promise(res => {
-    if (!window.speechSynthesis) { res(); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text.substring(0,600));
-    u.lang='pt-BR'; u.rate=1.05; u.pitch=1.05; u.volume=1;
-    const pref = localStorage.getItem('kira_bv')||'';
-    const vs = window.speechSynthesis.getVoices();
-    const v = (pref&&vs.find(x=>x.name===pref))
-           || vs.find(x=>x.lang==='pt-BR'&&/Google/i.test(x.name))
-           || vs.find(x=>x.lang==='pt-BR')
-           || vs.find(x=>x.lang.startsWith('pt'))
-           || null;
-    if (v) u.voice=v;
-    let done=false;
-    const end=()=>{ if(!done){done=true;clearTimeout(tid);clearInterval(wid);res();} };
-    u.onend=end; u.onerror=end;
-    const tid=setTimeout(()=>{window.speechSynthesis.cancel();end();},35000);
-    const wid=setInterval(()=>{if(window.speechSynthesis.paused)window.speechSynthesis.resume();if(done)clearInterval(wid);},7000);
-    window.speechSynthesis.speak(u);
-  });
+    return new Promise(res=>{
+        if(!window.speechSynthesis){res();return;}
+        window.speechSynthesis.cancel();
+        const u=new SpeechSynthesisUtterance(text.substring(0,600));
+        u.lang='pt-BR'; u.rate=1.06; u.pitch=1.05; u.volume=1;
+        const pref=localStorage.getItem('kira_bv')||'';
+        const vs=window.speechSynthesis.getVoices();
+        const v=(pref&&vs.find(x=>x.name===pref))||vs.find(x=>x.lang==='pt-BR'&&/Google/i.test(x.name))||vs.find(x=>x.lang==='pt-BR')||vs.find(x=>x.lang.startsWith('pt'))||null;
+        if(v)u.voice=v;
+        let done=false;
+        const end=()=>{if(!done){done=true;clearTimeout(tid);clearInterval(wid);res();}};
+        u.onend=end; u.onerror=end;
+        const tid=setTimeout(()=>{window.speechSynthesis.cancel();end();},35000);
+        const wid=setInterval(()=>{if(window.speechSynthesis.paused)window.speechSynthesis.resume();if(done)clearInterval(wid);},7000);
+        window.speechSynthesis.speak(u);
+    });
 }
 
 function previewVoz() {
-  speak('Kira online. Dados sincronizados. Pode falar.');
+    speakKira('Kira online. Sistemas sincronizados. Pode falar, Senhor.');
+}
+
+/* PCM → WAV — idêntico ao original */
+function pcmToWav(b64, rate) {
+    const buffer=Uint8Array.from(atob(b64),c=>c.charCodeAt(0)).buffer;
+    const header=new ArrayBuffer(44), view=new DataView(header);
+    view.setUint32(0,0x52494646,false); view.setUint32(4,36+buffer.byteLength,true);
+    view.setUint32(8,0x57415645,false); view.setUint32(12,0x666d7420,false);
+    view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+    view.setUint32(24,rate,true); view.setUint32(28,rate*2,true);
+    view.setUint16(32,2,true); view.setUint16(34,16,true);
+    view.setUint32(36,0x64617461,false); view.setUint32(40,buffer.byteLength,true);
+    const combined=new Uint8Array(header.byteLength+buffer.byteLength);
+    combined.set(new Uint8Array(header),0); combined.set(new Uint8Array(buffer),header.byteLength);
+    return combined.buffer;
 }
 
 /* ══════════════════════════════════════════════
-   METRIC CARDS {{CARD:T|V|U}}
+   CARDS {{CARD:T|V|U}}
 ══════════════════════════════════════════════ */
 function parseCards(text) {
-  const re=/\{\{CARD:(.*?)\|(.*?)\|(.*?)\}\}/g; let m;
-  while((m=re.exec(text))!==null) showCard(m[1],m[2],m[3]);
-  return text.replace(re,'').trim();
+    const re=/\{\{CARD:(.*?)\|(.*?)\|(.*?)\}\}/g; let m;
+    while((m=re.exec(text))!==null) showCard(m[1],m[2],m[3]);
+    return text.replace(re,'').trim();
 }
-function showCard(title,val,unit) {
-  const c=document.createElement('div'); c.className='mcard';
-  c.innerHTML=`<div class="mc-t">${title}</div><div class="mc-v">${val}</div><div class="mc-l">${unit}</div>`;
-  document.body.appendChild(c);
-  setTimeout(()=>{ c.classList.add('out'); setTimeout(()=>c.remove(),500); },10000);
+function showCard(title,value,label) {
+    const card=document.createElement('div'); card.className='data-card';
+    card.innerHTML=
+        `<div style="font-size:.75em;letter-spacing:.2em;color:#ec4899;font-weight:700;margin-bottom:3px;text-transform:uppercase">${title}</div>`+
+        `<div style="font-family:'Orbitron',monospace;font-size:1.2rem;color:#fff">${value}</div>`+
+        `<div style="font-size:.7em;color:rgba(200,190,210,.4);text-transform:uppercase;margin-top:2px">${label}</div>`;
+    document.getElementById('card-container').appendChild(card);
+    setTimeout(()=>{card.classList.add('fade-out');setTimeout(()=>card.remove(),600);},9000);
 }
 
 /* ══════════════════════════════════════════════
-   CHAT UI + LOG
+   RESET STATE — idêntico ao original
 ══════════════════════════════════════════════ */
-function addChat(role, text) {
-  const box=document.getElementById('chatbox');
-  const d=document.createElement('div');
-  d.className='cm cm-'+(role==='user'?'u':'k');
-  d.innerHTML=`<div class="cm-lbl">${role==='user'?'VOCÊ':'KIRA'}</div>${text.slice(0,220)}${text.length>220?'…':''}`;
-  box.appendChild(d);
-  while(box.children.length>10) box.removeChild(box.firstChild);
-  box.scrollTop=box.scrollHeight;
-}
-function addLog(msg, type='sys') {
-  const log=document.getElementById('log'); if(!log) return;
-  const d=document.createElement('div'); d.className='le';
-  const c={user:'#38bdf8',kira:'#ec4899',sys:'rgba(180,170,200,.24)',err:'#ff5555'};
-  d.style.color=c[type]||c.sys;
-  d.textContent='['+new Date().toLocaleTimeString('pt-BR')+'] '+msg;
-  log.appendChild(d);
-  while(log.children.length>25) log.removeChild(log.firstChild);
+function resetState() {
+    isThinking=false; isRecording=false; isSpeaking=false;
+    if(micStream) micStream.getAudioTracks().forEach(t=>{t.enabled=true;});
+    orbContainer.classList.remove('thinking','listening','speaking');
+    setTimeout(()=>{
+        if(!isThinking&&!isRecording&&!isSpeaking)
+            subtitleEl.classList.add('opacity-0');
+    },3000);
 }
 
 /* ══════════════════════════════════════════════
    SETTINGS
 ══════════════════════════════════════════════ */
 function saveSettings() {
-  localStorage.setItem('kira_gem',       document.getElementById('gem-key')?.value||'');
-  localStorage.setItem('kira_gem_voice', document.getElementById('gem-voice')?.value||'Kore');
-  localStorage.setItem('kira_bv',        document.getElementById('bv-sel')?.value||'');
+    localStorage.setItem('kira_gem',       document.getElementById('gem-key')?.value||'');
+    localStorage.setItem('kira_gem_voice', document.getElementById('gem-voice')?.value||'Kore');
+    localStorage.setItem('kira_bv',        document.getElementById('bv-sel')?.value||'');
 }
 function loadSettings() {
-  const el=document.getElementById('gem-key');   if(el) el.value=localStorage.getItem('kira_gem')||'';
-  const ev=document.getElementById('gem-voice'); if(ev) ev.value=localStorage.getItem('kira_gem_voice')||'Kore';
-  chatHist=JSON.parse(localStorage.getItem(HKEY)||'[]');
+    const el=document.getElementById('gem-key');   if(el)el.value=localStorage.getItem('kira_gem')||'';
+    const ev=document.getElementById('gem-voice'); if(ev)ev.value=localStorage.getItem('kira_gem_voice')||'Kore';
+    chatHistory=JSON.parse(localStorage.getItem(HKEY)||'[]');
 }
 function populateBVoices() {
-  const sel=document.getElementById('bv-sel'); if(!sel) return;
-  const vs=window.speechSynthesis?.getVoices()||[];
-  const pt=vs.filter(v=>v.lang.startsWith('pt'));
-  const pref=localStorage.getItem('kira_bv')||'';
-  while(sel.options.length>1) sel.remove(1);
-  pt.forEach(v=>{
-    const o=document.createElement('option'); o.value=v.name;
-    o.textContent=v.name+' ('+v.lang+')';
-    if(v.name===pref) o.selected=true;
-    sel.appendChild(o);
-  });
+    const sel=document.getElementById('bv-sel'); if(!sel)return;
+    const vs=window.speechSynthesis?.getVoices()||[];
+    const pt=vs.filter(v=>v.lang.startsWith('pt'));
+    const pref=localStorage.getItem('kira_bv')||'';
+    while(sel.options.length>1)sel.remove(1);
+    pt.forEach(v=>{
+        const o=document.createElement('option');o.value=v.name;
+        o.textContent=v.name+' ('+v.lang+')';
+        if(v.name===pref)o.selected=true;
+        sel.appendChild(o);
+    });
 }
-window.speechSynthesis?.addEventListener('voiceschanged', populateBVoices);
-
-function openCfg()  { document.getElementById('cfg').classList.add('open'); refreshBrainUI(); refreshCfgDB(); populateBVoices(); }
-function closeCfg() { document.getElementById('cfg').classList.remove('open'); }
-
-/* ══════════════════════════════════════════════
-   CURSOR + KEYBOARD
-══════════════════════════════════════════════ */
-let cx=0,cy=0,mx=0,my=0;
-document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;});
-(function aC(){cx+=(mx-cx)*.13;cy+=(my-cy)*.13;const c=document.getElementById('cur');if(c){c.style.left=cx+'px';c.style.top=cy+'px';}requestAnimationFrame(aC);})();
-
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape') closeCfg();
-  if(e.key===' '&&!e.target.matches('input,select,textarea')&&micStream){
-    e.preventDefault(); orbClick();
-  }
-});
+window.speechSynthesis?.addEventListener('voiceschanged',populateBVoices);
+function openCfg()  { document.getElementById('cfg-panel').classList.add('open'); refreshBrainUI(); populateBVoices(); }
+function closeCfg() { document.getElementById('cfg-panel').classList.remove('open'); }
 
 /* ══════════════════════════════════════════════
-   INICIALIZAÇÃO
+   INIT — igual ao original: carrega Firebase
+   no onload sem esperar clique
 ══════════════════════════════════════════════ */
-window.addEventListener('load', () => {
-  loadSettings();
-  populateBVoices();
-  resW();
-  refreshBrainUI();
-  /* Firebase inicia AUTOMATICAMENTE — sem esperar clique */
-  startFirebase();
-});
+window.onload = () => {
+    loadSettings();
+    populateBVoices();
+    refreshBrainUI();
+    syncAgroAnalytics(); // Firebase carrega automático
+};
 </script>
 </body>
 </html>

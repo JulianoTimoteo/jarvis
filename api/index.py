@@ -1,6 +1,6 @@
 """
 KIRA — Analista Operacional Sênior
-Versão Super Otimizada - Sem Firebase por enquanto
+Versão Completa com Firebase
 """
 
 import os
@@ -8,18 +8,59 @@ import json
 import tempfile
 from pathlib import Path
 from datetime import datetime
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+import asyncio
+
+# Firebase
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    FIREBASE_AVAILABLE = True
+except:
+    FIREBASE_AVAILABLE = False
 
 # ============================================================
 # CONFIGURAÇÕES
 # ============================================================
 GROQ_KEY = os.getenv("GROQ_KEY", "")
+FIREBASE_CRED_JSON = os.getenv("FIREBASE_CRED_JSON", "")
+
+# Cache
+cache = {
+    "dados": [],
+    "ultima_atualizacao": None,
+    "colhedoras_proprias": 0,
+    "colhedoras_fretistas": 0,
+    "total_registros": 0,
+    "total_area": 0,
+    "total_horas_corte": 0,
+    "total_horas_rtk": 0,
+    "adesao_rtk": 0,
+    "erro": None,
+    "carregando": True
+}
+
+# Inicializar Firebase
+db = None
+firebase_status = "Desconectado"
+
+if FIREBASE_AVAILABLE and FIREBASE_CRED_JSON:
+    try:
+        cred_dict = json.loads(FIREBASE_CRED_JSON)
+        cred = credentials.Certificate(cred_dict)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+            db = firestore.client()
+            firebase_status = "Conectado"
+            print("✅ Firebase conectado")
+    except Exception as e:
+        firebase_status = f"Erro: {str(e)[:50]}"
 
 # App
-app = FastAPI(title="KIRA", version="1.0")
+app = FastAPI(title="KIRA", version="1.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,12 +70,91 @@ app.add_middleware(
 )
 
 # ============================================================
+# CARREGAR DADOS
+# ============================================================
+async def carregar_dados():
+    """Carrega dados do Firebase"""
+    global cache
+    
+    if not db:
+        cache["carregando"] = False
+        cache["erro"] = "Firebase não conectado"
+        return
+    
+    cache["carregando"] = True
+    
+    colecoes = ["tpl", "acmSafra", "producao", "snapshots"]
+    
+    total_registros = 0
+    colh_proprias = set()
+    colh_fretistas = set()
+    total_area = 0
+    total_horas_corte = 0
+    total_horas_rtk = 0
+    
+    for colecao in colecoes:
+        try:
+            docs = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: db.collection(colecao).limit(200).get()
+                ),
+                timeout=5.0
+            )
+            
+            for doc in docs:
+                dados = doc.to_dict()
+                if dados:
+                    total_registros += 1
+                    
+                    cod = dados.get("COD. EQUIPAMENTO") or dados.get("COD_EQUIPAMENTO")
+                    if cod:
+                        cod_str = str(cod)
+                        if cod_str.startswith("80"):
+                            colh_proprias.add(cod_str)
+                        elif cod_str.startswith("93"):
+                            colh_fretistas.add(cod_str)
+                    
+                    area = dados.get("AREA TRABALHADA ANALITICA") or dados.get("area_trabalhada") or 0
+                    horas_corte = dados.get("HRS CORTE BASE AUT LIGADO") or dados.get("horas_corte") or 0
+                    horas_rtk = dados.get("HRS RTK_LIGADO") or dados.get("horas_rtk") or 0
+                    
+                    try:
+                        total_area += float(str(area).replace(",", ".")) if area else 0
+                        total_horas_corte += float(str(horas_corte).replace(",", ".")) if horas_corte else 0
+                        total_horas_rtk += float(str(horas_rtk).replace(",", ".")) if horas_rtk else 0
+                    except:
+                        pass
+                        
+        except Exception as e:
+            print(f"Erro em {colecao}: {e}")
+    
+    adesao = (total_horas_rtk / total_horas_corte * 100) if total_horas_corte > 0 else 0
+    
+    cache.update({
+        "total_registros": total_registros,
+        "colhedoras_proprias": len(colh_proprias),
+        "colhedoras_fretistas": len(colh_fretistas),
+        "total_area": total_area,
+        "total_horas_corte": total_horas_corte,
+        "total_horas_rtk": total_horas_rtk,
+        "adesao_rtk": adesao,
+        "ultima_atualizacao": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "carregando": False,
+        "erro": None
+    })
+    
+    print(f"✅ Carregado: {total_registros} registros, {len(colh_proprias)} próprias, {len(colh_fretistas)} fretistas")
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(carregar_dados())
+
+# ============================================================
 # ENDPOINTS
 # ============================================================
 
 @app.get("/")
 async def root():
-    """Interface principal - Super Rápida"""
     return HTMLResponse("""
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -88,6 +208,7 @@ async def root():
                 margin-right: 8px;
             }
             .online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+            .offline { background: #ef4444; }
             .transcript-area {
                 background: rgba(10, 10, 15, 0.8);
                 padding: 16px;
@@ -95,8 +216,25 @@ async def root():
                 margin: 15px 0;
                 min-height: 80px;
             }
-            a { color: #ec4899; text-decoration: none; }
-            .highlight { color: #ec4899; font-weight: bold; }
+            .metric {
+                display: inline-block;
+                background: rgba(236, 72, 153, 0.2);
+                padding: 8px 16px;
+                border-radius: 8px;
+                margin: 4px;
+            }
+            .metric-value {
+                font-size: 1.5rem;
+                font-weight: bold;
+                color: #ec4899;
+            }
+            .loading {
+                animation: pulse 1s infinite;
+            }
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
         </style>
     </head>
     <body>
@@ -107,11 +245,13 @@ async def root():
             </div>
 
             <div class="card">
-                <h3>📡 Status</h3>
-                <p><span class="status-dot online"></span> Sistema Operacional</p>
-                <p>🎤 <span class="highlight">Groq</span> disponível</p>
-                <p>🗣️ <span class="highlight">Reconhecimento de voz</span> ativo</p>
-                <p>📅 <span id="time"></span></p>
+                <h3>📡 Status do Sistema</h3>
+                <div id="status"></div>
+            </div>
+
+            <div class="card">
+                <h3>📊 Dados do Firebase</h3>
+                <div id="dados"></div>
             </div>
 
             <div class="card">
@@ -123,12 +263,13 @@ async def root():
             </div>
 
             <div class="card">
-                <h3>📊 Exemplos de Perguntas</h3>
+                <h3>📋 Exemplos de Perguntas</h3>
                 <ul>
-                    <li>"Qual a produção total?"</li>
-                    <li>"Quantas colhedoras?"</li>
-                    <li>"Como está a eficiência?"</li>
-                    <li>"Aprenda que [fato importante]"</li>
+                    <li>"Quantas colhedoras próprias?"</li>
+                    <li>"Quantas colhedoras fretistas?"</li>
+                    <li>"Qual a área total trabalhada?"</li>
+                    <li>"Como está a adesão ao RTK?"</li>
+                    <li>"Mostre as estatísticas"</li>
                 </ul>
             </div>
         </div>
@@ -139,7 +280,51 @@ async def root():
             let isRecording = false;
             let handsFreeMode = false;
 
-            document.getElementById('time').innerHTML = new Date().toLocaleString('pt-BR');
+            async function atualizarDados() {
+                try {
+                    const res = await fetch('/api/dados');
+                    const data = await res.json();
+                    
+                    document.getElementById('status').innerHTML = `
+                        <p><span class="status-dot ${data.firebase_conectado ? 'online' : 'offline'}"></span>
+                        Firebase: ${data.firebase_conectado ? '✅ CONECTADO' : '❌ DESCONECTADO'}</p>
+                        <p>🎤 Groq: ${data.groq_ok ? '✅ Disponível' : '❌ Não configurado'}</p>
+                        <p>🕐 Servidor: ${data.hora}</p>
+                    `;
+                    
+                    if (data.carregando) {
+                        document.getElementById('dados').innerHTML = '<div class="loading">🔄 Carregando dados do Firebase...</div>';
+                    } else if (data.total_registros > 0) {
+                        document.getElementById('dados').innerHTML = `
+                            <div class="metric">
+                                <div class="metric-value">${data.total_registros.toLocaleString()}</div>
+                                <div>registros</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.colhedoras_proprias}</div>
+                                <div>próprias</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.colhedoras_fretistas}</div>
+                                <div>fretistas</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.total_area.toLocaleString()}</div>
+                                <div>hectares</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.adesao_rtk.toFixed(1)}%</div>
+                                <div>RTK</div>
+                            </div>
+                            <p style="margin-top: 12px; font-size: 0.8rem;">📅 Atualizado: ${data.ultima_atualizacao || 'Nunca'}</p>
+                        `;
+                    } else {
+                        document.getElementById('dados').innerHTML = '<p>⚠️ Nenhum dado encontrado no Firebase</p>';
+                    }
+                } catch (error) {
+                    console.error('Erro:', error);
+                }
+            }
 
             async function startRecording() {
                 if (isRecording) {
@@ -188,7 +373,7 @@ async def root():
                             speechSynthesis.speak(utterance);
 
                         } catch (error) {
-                            document.getElementById('transcript').innerHTML = '❌ Erro ao processar: ' + error.message;
+                            document.getElementById('transcript').innerHTML = '❌ Erro ao processar';
                         }
 
                         if (handsFreeMode) setTimeout(startRecording, 1000);
@@ -220,6 +405,9 @@ async def root():
                     }
                 }
             }
+
+            atualizarDados();
+            setInterval(atualizarDados, 10000);
         </script>
     </body>
     </html>
@@ -227,23 +415,38 @@ async def root():
 
 @app.get("/api/status")
 async def status():
-    """Status rápido"""
     return {
         "status": "online",
-        "time": datetime.now().isoformat(),
-        "groq_available": bool(GROQ_KEY),
-        "message": "KIRA operacional"
+        "hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "firebase_conectado": firebase_status == "Conectado",
+        "groq_ok": bool(GROQ_KEY)
+    }
+
+@app.get("/api/dados")
+async def get_dados():
+    return {
+        "total_registros": cache["total_registros"],
+        "colhedoras_proprias": cache["colhedoras_proprias"],
+        "colhedoras_fretistas": cache["colhedoras_fretistas"],
+        "total_area": cache["total_area"],
+        "total_horas_corte": cache["total_horas_corte"],
+        "total_horas_rtk": cache["total_horas_rtk"],
+        "adesao_rtk": cache["adesao_rtk"],
+        "ultima_atualizacao": cache["ultima_atualizacao"],
+        "carregando": cache["carregando"],
+        "erro": cache["erro"],
+        "firebase_conectado": firebase_status == "Conectado",
+        "groq_ok": bool(GROQ_KEY),
+        "hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     }
 
 @app.post("/api/transcribe")
 async def transcrever(audio: UploadFile = File(...)):
-    """Transcreve áudio usando Groq"""
     if not GROQ_KEY:
-        return {"text": "Groq não configurado. Configure GROQ_KEY nas variáveis de ambiente."}
+        return {"text": "Groq não configurado"}
     
     try:
         conteudo = await audio.read()
-        
         if len(conteudo) < 1000:
             return {"text": "Áudio muito curto"}
         
@@ -265,25 +468,45 @@ async def transcrever(audio: UploadFile = File(...)):
         if response.status_code == 200:
             texto = response.json().get("text", "").strip()
             return {"text": texto if texto else "Não entendi"}
-        else:
-            return {"text": f"Erro na transcrição: {response.status_code}"}
+        return {"text": f"Erro: {response.status_code}"}
             
     except Exception as e:
-        return {"text": f"Erro: {str(e)}"}
+        return {"text": f"Erro: {str(e)[:100]}"}
 
 @app.post("/api/chat")
 async def chat(text: str = Form(...), session_id: str = Form(default="default")):
-    """Chat com IA usando Groq"""
     if not GROQ_KEY:
-        return {"answer": "Groq não configurado. Configure GROQ_KEY.", "session_id": session_id}
+        return {"answer": "Groq não configurado", "session_id": session_id}
     
+    # Aprendizado
     if "aprenda" in text.lower() or "grave" in text.lower():
         return {"answer": "Memorizado, Senhor.", "session_id": session_id}
     
-    system_prompt = """Você é KIRA, assistente da Usina Pitangueiras.
-- Seja formal e trate o usuário como "Senhor"
+    # Contexto com dados reais
+    contexto = ""
+    if cache["total_registros"] > 0:
+        contexto = f"""
+DADOS REAIS DA USINA:
+- Total de registros processados: {cache["total_registros"]}
+- Colhedoras próprias: {cache["colhedoras_proprias"]}
+- Colhedoras fretistas: {cache["colhedoras_fretistas"]}
+- Área trabalhada: {cache["total_area"]:.0f} hectares
+- Horas de corte: {cache["total_horas_corte"]:.0f} horas
+- Adesão ao RTK: {cache["adesao_rtk"]:.1f}%
+"""
+    
+    system_prompt = f"""Você é KIRA, Analista Operacional da Usina Pitangueiras.
+
+{contexto}
+
+REGRAS IMPORTANTES:
+- Use SOMENTE os dados fornecidos acima
+- Se não tiver dados, diga "Senhor, ainda não há dados carregados do Firebase"
+- NUNCA invente números ou valores
+- Responda de forma formal, trate o usuário como "Senhor"
 - Respostas curtas (máximo 15 palavras)
-- Seja objetiva e profissional"""
+
+RESPOSTA:"""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -299,15 +522,14 @@ async def chat(text: str = Form(...), session_id: str = Form(default="default"))
                     "model": "llama-3.3-70b-versatile",
                     "messages": messages,
                     "temperature": 0.3,
-                    "max_tokens": 100
+                    "max_tokens": 150
                 }
             )
         
         if response.status_code == 200:
             resposta = response.json()["choices"][0]["message"]["content"].strip()
             return {"answer": resposta, "session_id": session_id}
-        else:
-            return {"answer": "Erro ao processar consulta.", "session_id": session_id}
+        return {"answer": "Erro ao processar", "session_id": session_id}
             
     except Exception as e:
         return {"answer": f"Erro: {str(e)[:100]}", "session_id": session_id}

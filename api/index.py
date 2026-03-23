@@ -1,24 +1,27 @@
 """
-KIRA — Versão Ultra Leve
-Sem carregamento automático - apenas endpoints básicos
+KIRA - Analista de Cana-de-Açúcar
+Dados REAIS do Firebase
 """
 
-import os
-import json
-from datetime import datetime
 from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+import os
 import tempfile
+import json
 from pathlib import Path
+from datetime import datetime
 
-# ============================================================
-# CONFIGURAÇÕES MÍNIMAS
-# ============================================================
-GROQ_KEY = os.getenv("GROQ_KEY", "")
+# Tentar importar Firebase
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    FIREBASE_OK = True
+except:
+    FIREBASE_OK = False
 
-app = FastAPI(title="KIRA", version="1.0")
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,303 +30,335 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cache simples
-status_cache = {
-    "firebase": False,
-    "message": "Aguardando verificação"
+GROQ_KEY = os.getenv("GROQ_KEY", "")
+FIREBASE_CRED = os.getenv("FIREBASE_CRED_JSON", "")
+
+# Cache dos dados reais
+dados_reais = {
+    "carregado": False,
+    "total_registros": 0,
+    "colhedoras_proprias": 0,
+    "colhedoras_fretistas": 0,
+    "caminhoes_proprios": 0,
+    "caminhoes_terceiros": 0,
+    "peso_total_kg": 0,
+    "total_viagens": 0,
+    "ultima_atualizacao": None,
+    "erro": None
 }
 
-# ============================================================
-# ENDPOINTS
-# ============================================================
+# Inicializar Firebase
+db = None
+if FIREBASE_OK and FIREBASE_CRED:
+    try:
+        cred_dict = json.loads(FIREBASE_CRED)
+        cred = credentials.Certificate(cred_dict)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+            db = firestore.client()
+            print("✅ Firebase conectado")
+    except Exception as e:
+        print(f"❌ Firebase: {e}")
+
+def carregar_dados():
+    """Carrega dados do Firebase"""
+    global dados_reais
+    
+    if not db:
+        dados_reais["erro"] = "Firebase não conectado"
+        return
+    
+    try:
+        # Tenta ler a coleção PRODUCAO_07_2025
+        doc_ref = db.collection("PRODUCAO_07_2025").document("chunks")
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            dados_reais["erro"] = "Coleção PRODUCAO_07_2025 não encontrada"
+            return
+        
+        dados = doc.to_dict()
+        cabecalho = dados.get("cab", [])
+        chunks = dados.get("chunks", {})
+        
+        # Processa os dados
+        colh_proprias = set()
+        colh_fretistas = set()
+        cam_proprios = set()
+        cam_terceiros = set()
+        peso_total = 0
+        total_viagens = 0
+        registros = 0
+        
+        for chunk_name, chunk_data in chunks.items():
+            if "rows" in chunk_data:
+                linhas = chunk_data["rows"]
+                for linha in linhas:
+                    if len(linha) != len(cabecalho):
+                        continue
+                    
+                    # Converte linha em dicionário
+                    reg = {}
+                    for i, campo in enumerate(cabecalho):
+                        reg[campo] = linha[i]
+                    
+                    registros += 1
+                    
+                    # Colhedoras
+                    for i in range(1, 4):
+                        colh = reg.get(f"Carreg./Colhed. {i}")
+                        if colh:
+                            colh_str = str(colh).strip()
+                            if colh_str.startswith("80"):
+                                colh_proprias.add(colh_str)
+                            elif colh_str.startswith("93"):
+                                colh_fretistas.add(colh_str)
+                    
+                    # Caminhões
+                    frota = reg.get("Frota Motriz")
+                    if frota:
+                        frota_str = str(frota).strip()
+                        if frota_str.startswith("31"):
+                            cam_proprios.add(frota_str)
+                        elif frota_str.startswith("91"):
+                            cam_terceiros.add(frota_str)
+                    
+                    # Peso
+                    peso = reg.get("Peso Líquido", 0)
+                    if peso and peso != "":
+                        try:
+                            peso_num = float(str(peso).replace(",", "."))
+                            peso_total += peso_num
+                            total_viagens += 1
+                        except:
+                            pass
+        
+        # Atualiza cache
+        dados_reais["carregado"] = True
+        dados_reais["total_registros"] = registros
+        dados_reais["colhedoras_proprias"] = len(colh_proprias)
+        dados_reais["colhedoras_fretistas"] = len(colh_fretistas)
+        dados_reais["caminhoes_proprios"] = len(cam_proprios)
+        dados_reais["caminhoes_terceiros"] = len(cam_terceiros)
+        dados_reais["peso_total_kg"] = peso_total
+        dados_reais["total_viagens"] = total_viagens
+        dados_reais["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        dados_reais["erro"] = None
+        
+        print(f"✅ Dados carregados: {registros} registros")
+        print(f"   🚜 Colhedoras: {len(colh_proprias)} próprias, {len(colh_fretistas)} fretistas")
+        print(f"   🚛 Caminhões: {len(cam_proprios)} próprios, {len(cam_terceiros)} terceiros")
+        print(f"   📊 Peso: {peso_total:,.0f} kg")
+        
+    except Exception as e:
+        dados_reais["erro"] = str(e)
+        print(f"❌ Erro ao carregar: {e}")
+
+# Carrega os dados na inicialização
+try:
+    carregar_dados()
+except Exception as e:
+    print(f"Erro na inicialização: {e}")
 
 @app.get("/")
-async def root():
-    return HTMLResponse("""
+async def index():
+    return HTMLResponse(f"""
     <!DOCTYPE html>
-    <html lang="pt-BR">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>KIRA - Analista Operacional</title>
+        <title>KIRA - Cana-de-Açúcar</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
-                color: #e2e8f0;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
-                min-height: 100vh;
+            body {{
+                background: #0a0a0f;
+                color: white;
+                font-family: monospace;
                 padding: 20px;
-            }
-            .container { max-width: 800px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .logo {
-                font-size: 3rem;
-                font-weight: 800;
-                background: linear-gradient(135deg, #ec4899, #f472b6);
-                -webkit-background-clip: text;
-                background-clip: text;
-                color: transparent;
-            }
-            .card {
-                background: rgba(26, 26, 46, 0.9);
-                border-radius: 16px;
-                padding: 24px;
-                margin-bottom: 20px;
-                border-left: 4px solid #ec4899;
-            }
-            button {
+                text-align: center;
+            }}
+            button {{
                 background: #ec4899;
                 border: none;
-                padding: 12px 28px;
-                border-radius: 40px;
+                padding: 15px 30px;
+                border-radius: 50px;
                 color: white;
+                font-size: 18px;
                 cursor: pointer;
-                font-size: 16px;
-                margin: 5px;
-                transition: all 0.2s;
-            }
-            button:hover { transform: scale(1.05); }
-            .status-dot {
+                margin: 10px;
+            }}
+            .box {{
+                background: #1a1a2e;
+                padding: 20px;
+                border-radius: 10px;
+                margin: 20px auto;
+                max-width: 600px;
+                text-align: left;
+            }}
+            .success {{ color: #10b981; }}
+            .warning {{ color: #f59e0b; }}
+            .error {{ color: #ef4444; }}
+            .metric {{
                 display: inline-block;
-                width: 10px;
-                height: 10px;
-                border-radius: 50%;
-                margin-right: 8px;
-            }
-            .online { background: #10b981; box-shadow: 0 0 8px #10b981; }
-            .offline { background: #ef4444; }
-            .transcript-area {
-                background: rgba(10, 10, 15, 0.8);
-                padding: 16px;
-                border-radius: 12px;
-                margin: 15px 0;
-                min-height: 80px;
-            }
-            .loading {
-                animation: pulse 1s infinite;
-            }
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.5; }
-            }
-            .success { color: #10b981; }
-            .error { color: #ef4444; }
+                background: #0a0a0f;
+                padding: 10px;
+                margin: 5px;
+                border-radius: 8px;
+            }}
+            .value {{
+                font-size: 1.5rem;
+                font-weight: bold;
+                color: #ec4899;
+            }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <div class="header">
-                <div class="logo">🤖 KIRA</div>
-                <p>Analista Operacional Sênior - Usina Pitangueiras</p>
-            </div>
-
-            <div class="card">
-                <h3>📡 Status do Sistema</h3>
-                <div id="status">
-                    <p>🎤 Groq: <span id="groq-status">✅ Disponível</span></p>
-                    <p>🕐 <span id="time"></span></p>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>🎤 Comandos de Voz</h3>
-                <button onclick="startRecording()">🎙️ FALAR AGORA</button>
-                <button onclick="toggleHandsFree()">✋ MÃOS LIVRES</button>
-                <div class="transcript-area" id="transcript">👉 Clique no botão e fale</div>
-                <div class="transcript-area" id="response" style="color: #ec4899;"></div>
-            </div>
-
-            <div class="card">
-                <h3>📋 Exemplos de Perguntas</h3>
-                <ul>
-                    <li>"Olá, como você está?"</li>
-                    <li>"O que você pode fazer?"</li>
-                    <li>"Me ajude com dados agrícolas"</li>
-                </ul>
-            </div>
+        <h1>🤖 KIRA</h1>
+        <p>Analista de Cana-de-Açúcar - Usina Pitangueiras</p>
+        
+        <div class="box">
+            <h3>📊 DADOS REAIS DO FIREBASE</h3>
+            {f'''
+            <div class="metric"><div class="value">{dados_reais["total_registros"]:,}</div>registros</div>
+            <div class="metric"><div class="value">{dados_reais["colhedoras_proprias"]}</div>colhedoras próprias</div>
+            <div class="metric"><div class="value">{dados_reais["colhedoras_fretistas"]}</div>colhedoras fretistas</div>
+            <div class="metric"><div class="value">{dados_reais["peso_total_kg"]/1000:,.0f}</div>toneladas</div>
+            <div class="metric"><div class="value">{dados_reais["total_viagens"]:,}</div>viagens</div>
+            <div class="metric"><div class="value">{dados_reais["caminhoes_proprios"]}</div>caminhões próprios</div>
+            <div class="metric"><div class="value">{dados_reais["caminhoes_terceiros"]}</div>caminhões terceiros</div>
+            <p style="margin-top: 10px;">📅 Atualizado: {dados_reais["ultima_atualizacao"] or "Nunca"}</p>
+            ''' if dados_reais["carregado"] else f'<p class="warning">⚠️ {dados_reais["erro"] or "Carregando dados..."}</p>'}
         </div>
-
+        
+        <div class="box">
+            <h3>🎤 Fale com a KIRA</h3>
+            <button onclick="startRecording()">🎙️ FALAR (5 segundos)</button>
+            <div id="result" style="margin-top: 20px; padding: 10px; background: #0a0a0f; border-radius: 8px;"></div>
+        </div>
+        
+        <div class="box">
+            <h3>📋 Perguntas sobre CANA-DE-AÇÚCAR</h3>
+            <ul>
+                <li>"Quantas colhedoras próprias?"</li>
+                <li>"Quantas colhedoras fretistas?"</li>
+                <li>"Qual o peso total moído?"</li>
+                <li>"Quantas viagens?"</li>
+                <li>"Quantos caminhões próprios?"</li>
+            </ul>
+        </div>
+        
         <script>
-            let mediaRecorder = null;
-            let audioChunks = [];
-            let isRecording = false;
-            let handsFreeMode = false;
-
-            document.getElementById('time').innerHTML = new Date().toLocaleString('pt-BR');
-            setInterval(() => {
-                document.getElementById('time').innerHTML = new Date().toLocaleString('pt-BR');
-            }, 1000);
-
-            async function startRecording() {
-                if (isRecording) {
-                    if (mediaRecorder && mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                    }
-                    isRecording = false;
-                    document.querySelector('button[onclick="startRecording()"]').innerHTML = '🎙️ FALAR AGORA';
-                    return;
-                }
-
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-
-                    mediaRecorder.ondataavailable = event => {
-                        if (event.data.size > 0) audioChunks.push(event.data);
-                    };
-
-                    mediaRecorder.onstop = async () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        const formData = new FormData();
-                        formData.append('audio', audioBlob, 'audio.webm');
-
-                        document.getElementById('transcript').innerHTML = '🎙️ Processando...';
-
-                        try {
-                            const transcribeRes = await fetch('/api/transcribe', { method: 'POST', body: formData });
-                            const { text } = await transcribeRes.json();
-
-                            document.getElementById('transcript').innerHTML = `🗣️ Você: "${text}"`;
-
-                            const chatForm = new FormData();
-                            chatForm.append('text', text);
-                            chatForm.append('session_id', 'web_' + Date.now());
-
-                            const chatRes = await fetch('/api/chat', { method: 'POST', body: chatForm });
-                            const { answer } = await chatRes.json();
-
-                            document.getElementById('response').innerHTML = `🤖 KIRA: ${answer}`;
-
-                            const utterance = new SpeechSynthesisUtterance(answer);
-                            utterance.lang = 'pt-BR';
-                            utterance.rate = 0.95;
-                            speechSynthesis.speak(utterance);
-
-                        } catch (error) {
-                            document.getElementById('transcript').innerHTML = '❌ Erro ao processar: ' + error.message;
-                        }
-
-                        if (handsFreeMode) setTimeout(startRecording, 1000);
-                    };
-
-                    mediaRecorder.start();
-                    isRecording = true;
-                    document.querySelector('button[onclick="startRecording()"]').innerHTML = '⏹️ PARAR';
-                    document.getElementById('transcript').innerHTML = '🎙️ Ouvindo... Fale agora';
-
-                } catch (error) {
-                    alert('❌ Permissão do microfone negada');
-                }
-            }
-
-            function toggleHandsFree() {
-                handsFreeMode = !handsFreeMode;
-                const btn = document.querySelector('button[onclick="toggleHandsFree()"]');
-                if (handsFreeMode) {
-                    btn.innerHTML = '✋ MÃOS LIVRES (ATIVO)';
-                    btn.style.background = '#10b981';
-                    if (!isRecording) startRecording();
-                } else {
-                    btn.innerHTML = '✋ MÃOS LIVRES';
-                    btn.style.background = '#ec4899';
-                    if (isRecording) {
-                        mediaRecorder.stop();
-                        isRecording = false;
-                    }
-                }
-            }
+            let mediaRecorder;
+            let chunks = [];
+            
+            async function startRecording() {{
+                const stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
+                mediaRecorder = new MediaRecorder(stream);
+                chunks = [];
+                
+                mediaRecorder.ondataavailable = e => chunks.push(e.data);
+                mediaRecorder.onstop = async () => {{
+                    const blob = new Blob(chunks, {{ type: 'audio/webm' }});
+                    const form = new FormData();
+                    form.append('audio', blob);
+                    
+                    document.getElementById('result').innerHTML = '🎙️ Processando...';
+                    
+                    const trans = await fetch('/api/transcribe', {{ method: 'POST', body: form }});
+                    const {{ text }} = await trans.json();
+                    
+                    const chatForm = new FormData();
+                    chatForm.append('text', text);
+                    const chatRes = await fetch('/api/chat', {{ method: 'POST', body: chatForm }});
+                    const {{ answer }} = await chatRes.json();
+                    
+                    document.getElementById('result').innerHTML = `
+                        <strong>🗣️ Você:</strong> ${{text}}<br>
+                        <strong>🤖 KIRA:</strong> ${{answer}}
+                    `;
+                    
+                    const speech = new SpeechSynthesisUtterance(answer);
+                    speech.lang = 'pt-BR';
+                    speechSynthesis.speak(speech);
+                }};
+                
+                mediaRecorder.start();
+                setTimeout(() => mediaRecorder.stop(), 5000);
+                document.getElementById('result').innerHTML = '🎙️ Gravando... Fale sobre cana-de-açúcar';
+            }}
         </script>
     </body>
     </html>
     """)
 
-@app.get("/api/status")
-async def status():
-    return {
-        "status": "online",
-        "groq_ok": bool(GROQ_KEY),
-        "time": datetime.now().isoformat()
-    }
-
 @app.post("/api/transcribe")
-async def transcrever(audio: UploadFile = File(...)):
-    """Transcreve áudio usando Groq"""
+async def transcribe(audio: UploadFile = File(...)):
     if not GROQ_KEY:
-        return {"text": "Groq não configurado. Configure a variável GROQ_KEY."}
+        return {"text": "Groq não configurado"}
     
-    try:
-        conteudo = await audio.read()
-        if len(conteudo) < 1000:
-            return {"text": "Áudio muito curto"}
-        
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-            tmp.write(conteudo)
-            tmp_path = tmp.name
-        
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            with open(tmp_path, "rb") as audio_file:
-                response = await client.post(
-                    "https://api.groq.com/openai/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {GROQ_KEY}"},
-                    files={"file": ("audio.webm", audio_file, "audio/webm")},
-                    data={"model": "whisper-large-v3-turbo", "language": "pt"}
-                )
-        
-        Path(tmp_path).unlink(missing_ok=True)
-        
-        if response.status_code == 200:
-            texto = response.json().get("text", "").strip()
-            return {"text": texto if texto else "Não entendi"}
-        return {"text": f"Erro na transcrição: {response.status_code}"}
-            
-    except Exception as e:
-        return {"text": f"Erro: {str(e)[:100]}"}
+    content = await audio.read()
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    async with httpx.AsyncClient() as client:
+        with open(tmp_path, "rb") as f:
+            r = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {GROQ_KEY}"},
+                files={"file": ("audio.webm", f, "audio/webm")},
+                data={"model": "whisper-large-v3-turbo", "language": "pt"}
+            )
+    
+    Path(tmp_path).unlink()
+    return {"text": r.json().get("text", "")}
 
 @app.post("/api/chat")
-async def chat(text: str = Form(...), session_id: str = Form(default="default")):
-    """Chat com IA usando Groq"""
+async def chat(text: str = Form(...)):
     if not GROQ_KEY:
-        return {"answer": "Groq não configurado. Configure a variável GROQ_KEY.", "session_id": session_id}
+        return {"answer": "Groq não configurado"}
     
-    # Aprendizado
-    if any(p in text.lower() for p in ["aprenda", "grave", "memorize"]):
-        return {"answer": "Memorizado, Senhor.", "session_id": session_id}
+    # Constrói o contexto com dados REAIS
+    if dados_reais["carregado"]:
+        contexto = f"""
+DADOS REAIS DA USINA PITANGUEIRAS (CANA-DE-AÇÚCAR):
+- Registros processados: {dados_reais["total_registros"]}
+- Colhedoras próprias (prefixo 80): {dados_reais["colhedoras_proprias"]}
+- Colhedoras fretistas (prefixo 93): {dados_reais["colhedoras_fretistas"]}
+- Caminhões próprios (prefixo 31): {dados_reais["caminhoes_proprios"]}
+- Caminhões terceiros (prefixo 91): {dados_reais["caminhoes_terceiros"]}
+- Peso total moído: {dados_reais["peso_total_kg"]/1000:.0f} toneladas
+- Total de viagens: {dados_reais["total_viagens"]}
+"""
+    else:
+        contexto = "Aguardando dados do Firebase. Conecte-se ao banco de dados."
     
-    system_prompt = """Você é KIRA, Analista Operacional Sênior da Usina Pitangueiras.
+    system_prompt = f"""Você é KIRA, Analista de Cana-de-Açúcar da Usina Pitangueiras.
 
-REGRAS:
-- Seja formal, séria e objetiva
-- Trate o usuário como "Senhor"
-- Respostas curtas (máximo 15 palavras)
-- Não use markdown ou asteriscos
-- Se não souber algo, diga "Senhor, ainda não tenho essa informação"
+{contexto}
+
+REGRAS OBRIGATÓRIAS:
+1. VOCÊ SÓ FALA SOBRE CANA-DE-AÇÚCAR
+2. USE SOMENTE OS NÚMEROS ACIMA - NUNCA INVENTE
+3. Se perguntarem sobre soja, milho, dinheiro ou qualquer outra coisa, responda: "Senhor, meu banco de dados é exclusivo de cana-de-açúcar."
+4. Trate o usuário como "Senhor"
+5. Respostas curtas (máximo 15 palavras)
+6. Seja formal e objetiva
 
 RESPOSTA:"""
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": text}
-    ]
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_KEY}"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 100
+            }
+        )
     
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {GROQ_KEY}"},
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": messages,
-                    "temperature": 0.3,
-                    "max_tokens": 100
-                }
-            )
-        
-        if response.status_code == 200:
-            resposta = response.json()["choices"][0]["message"]["content"].strip()
-            return {"answer": resposta, "session_id": session_id}
-        return {"answer": "Erro ao processar consulta.", "session_id": session_id}
-            
-    except Exception as e:
-        return {"answer": f"Erro: {str(e)[:100]}", "session_id": session_id}
+    return {"answer": r.json()["choices"][0]["message"]["content"]}

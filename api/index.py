@@ -1,6 +1,6 @@
 """
-KIRA — Analista Operacional Sênior v12.0
-Leitura CORRETA de dados em chunks do Firebase
+KIRA — Analista Operacional Sênior v12.1
+Leitura de chunks + Animação 3D
 """
 
 import os
@@ -42,7 +42,9 @@ cache = {
     "total_viagens": 0,
     "ultima_sync": None,
     "carregando": True,
-    "erro": None
+    "erro": None,
+    "ultimo_dia": None,
+    "primeiro_dia": None
 }
 
 # Inicializar Firebase
@@ -62,7 +64,7 @@ if FIREBASE_AVAILABLE and FIREBASE_CRED_JSON:
         firebase_status = f"Erro: {str(e)[:50]}"
         print(f"❌ {firebase_status}")
 
-app = FastAPI(title="KIRA", version="12.0")
+app = FastAPI(title="KIRA", version="12.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -85,64 +87,73 @@ def extrair_dados_da_linha(linha, cabecalho):
         # Converte valores numéricos
         if campo in ["Peso Líquido", "Peso Bruto", "Peso Tara"]:
             try:
-                valor = float(str(valor).replace(",", "."))
+                if valor and valor != "":
+                    valor = float(str(valor).replace(",", "."))
+                else:
+                    valor = 0
             except:
                 valor = 0
         registro[campo] = valor
     
     return registro
 
-async def ler_colecao_chunks():
-    """Lê dados da coleção PRODUCAO_07_2025 que está em chunks"""
+async def ler_todas_colecoes():
+    """Lê todas as coleções de produção"""
     if not db:
         return []
     
     todos_registros = []
-    cabecalho = None
     
-    try:
-        # Primeiro, busca o documento principal que tem a estrutura de chunks
-        doc_ref = db.collection("PRODUCAO_07_2025").document("chunks")
-        doc = doc_ref.get()
-        
-        if doc.exists:
-            dados = doc.to_dict()
-            # Pega o cabeçalho do campo 'cab'
-            if "cab" in dados:
-                cabecalho = dados["cab"]
-                print(f"📋 Cabeçalho encontrado: {len(cabecalho)} campos")
+    # Coleções a serem lidas
+    colecoes = [
+        "PRODUCAO_07_2025",
+        "PRODUCAO_08_2025", 
+        "PRODUCAO_09_2025",
+        "tpl",
+        "acmSafra"
+    ]
+    
+    for colecao in colecoes:
+        try:
+            print(f"📖 Lendo coleção: {colecao}")
             
-            # Pega todos os chunks
-            chunks = dados.get("chunks", {})
-            print(f"📦 Encontrados {len(chunks)} chunks")
+            # Tenta ler como documento principal
+            doc_ref = db.collection(colecao).document("chunks")
+            doc = doc_ref.get()
             
-            for chunk_name, chunk_data in chunks.items():
-                if "rows" in chunk_data:
-                    linhas = chunk_data["rows"]
-                    print(f"   Processando {chunk_name}: {len(linhas)} linhas")
+            if doc.exists:
+                dados = doc.to_dict()
+                cabecalho = dados.get("cab", [])
+                
+                if cabecalho:
+                    chunks = dados.get("chunks", {})
+                    print(f"   📦 {len(chunks)} chunks encontrados")
                     
-                    for linha in linhas:
-                        if cabecalho:
-                            registro = extrair_dados_da_linha(linha, cabecalho)
-                            if registro:
-                                todos_registros.append(registro)
-        
-        # Também tenta ler outras coleções
-        outras_colecoes = ["acmSafra", "tpl", "snapshots"]
-        for colecao in outras_colecoes:
-            try:
+                    for chunk_name, chunk_data in chunks.items():
+                        if "rows" in chunk_data:
+                            linhas = chunk_data["rows"]
+                            for linha in linhas:
+                                if linha and len(linha) > 1:
+                                    registro = extrair_dados_da_linha(linha, cabecalho)
+                                    if registro:
+                                        registro["_colecao"] = colecao
+                                        registro["_chunk"] = chunk_name
+                                        todos_registros.append(registro)
+                            
+                            print(f"      ✅ {chunk_name}: {len(linhas)} linhas")
+            else:
+                # Tenta ler como documentos normais
                 docs = db.collection(colecao).limit(500).get()
                 for doc in docs:
                     dados = doc.to_dict()
                     if dados:
                         dados["_colecao"] = colecao
                         todos_registros.append(dados)
-            except:
-                pass
-                
-    except Exception as e:
-        print(f"❌ Erro ao ler chunks: {e}")
-        cache["erro"] = str(e)
+                if len(docs) > 0:
+                    print(f"   ✅ {len(docs)} documentos diretos")
+                    
+        except Exception as e:
+            print(f"   ❌ Erro em {colecao}: {e}")
     
     return todos_registros
 
@@ -155,23 +166,22 @@ def processar_dados(dados):
     cam_terceiros = set()
     total_peso = 0
     total_viagens = 0
+    datas = set()
     
     for reg in dados:
         try:
-            # Identifica equipamento
-            cod_equip = reg.get("Carreg./Colhed. 1") or reg.get("Carreg./Colhed. 2") or reg.get("Carreg./Colhed. 3") or reg.get("COD. EQUIPAMENTO")
-            
-            if cod_equip:
-                cod_str = str(cod_equip).strip()
-                
-                # Colhedoras: 80 = Própria, 93 = Fretista
-                if cod_str.startswith("80"):
-                    colh_proprias.add(cod_str)
-                elif cod_str.startswith("93"):
-                    colh_fretistas.add(cod_str)
+            # Identifica colhedoras (Carreg./Colhed. 1, 2, 3)
+            for i in range(1, 4):
+                colh = reg.get(f"Carreg./Colhed. {i}")
+                if colh:
+                    colh_str = str(colh).strip()
+                    if colh_str.startswith("80"):
+                        colh_proprias.add(colh_str)
+                    elif colh_str.startswith("93"):
+                        colh_fretistas.add(colh_str)
             
             # Caminhões da frota motriz
-            frota = reg.get("Frota Motriz") or reg.get("frota_motriz")
+            frota = reg.get("Frota Motriz")
             if frota:
                 frota_str = str(frota).strip()
                 if frota_str.startswith("31"):
@@ -180,17 +190,29 @@ def processar_dados(dados):
                     cam_terceiros.add(frota_str)
             
             # Peso líquido
-            peso = reg.get("Peso Líquido") or reg.get("peso_liquido") or 0
+            peso = reg.get("Peso Líquido", 0)
             try:
-                peso_num = float(str(peso).replace(",", "."))
-                if peso_num > 0:
+                if peso and peso > 0:
+                    peso_num = float(peso) if isinstance(peso, (int, float)) else float(str(peso).replace(",", "."))
                     total_peso += peso_num
                     total_viagens += 1
             except:
                 pass
+            
+            # Datas
+            data_entrada = reg.get("Data/hora Entrada") or reg.get("DATA_ENTRADA")
+            if data_entrada and isinstance(data_entrada, str):
+                try:
+                    data_str = data_entrada.split()[0]  # Pega só a data
+                    datas.add(data_str)
+                except:
+                    pass
                 
         except Exception as e:
             continue
+    
+    # Ordena datas
+    datas_list = sorted(list(datas)) if datas else []
     
     return {
         "colhedoras_proprias": len(colh_proprias),
@@ -199,7 +221,9 @@ def processar_dados(dados):
         "caminhoes_terceiros": len(cam_terceiros),
         "total_peso_liquido": total_peso,
         "total_viagens": total_viagens,
-        "total_registros": len(dados)
+        "total_registros": len(dados),
+        "ultimo_dia": datas_list[-1] if datas_list else None,
+        "primeiro_dia": datas_list[0] if datas_list else None
     }
 
 async def sincronizar_dados():
@@ -207,15 +231,16 @@ async def sincronizar_dados():
     global cache
     
     cache["carregando"] = True
+    print("🔄 Iniciando sincronização...")
     
     try:
-        dados = await ler_colecao_chunks()
+        dados = await ler_todas_colecoes()
         
         if dados:
             stats = processar_dados(dados)
             
             cache.update({
-                "dados": dados[:100],  # Guarda apenas os primeiros 100
+                "dados": dados[:100],
                 "total_registros": stats["total_registros"],
                 "colhedoras_proprias": stats["colhedoras_proprias"],
                 "colhedoras_fretistas": stats["colhedoras_fretistas"],
@@ -223,24 +248,29 @@ async def sincronizar_dados():
                 "caminhoes_terceiros": stats["caminhoes_terceiros"],
                 "total_peso_liquido": stats["total_peso_liquido"],
                 "total_viagens": stats["total_viagens"],
+                "ultimo_dia": stats["ultimo_dia"],
+                "primeiro_dia": stats["primeiro_dia"],
                 "ultima_sync": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                 "carregando": False,
                 "erro": None
             })
             
-            print(f"✅ Sincronizado: {stats['total_registros']} registros")
+            print(f"✅ Sincronização concluída!")
+            print(f"   📊 {stats['total_registros']} registros")
             print(f"   🚜 Colhedoras: {stats['colhedoras_proprias']} próprias, {stats['colhedoras_fretistas']} fretistas")
             print(f"   🚛 Caminhões: {stats['caminhoes_proprios']} próprios, {stats['caminhoes_terceiros']} terceiros")
-            print(f"   📊 Peso total: {stats['total_peso_liquido']:,.0f} t")
+            print(f"   📈 Peso total: {stats['total_peso_liquido']:,.0f} t")
+            print(f"   📅 Período: {stats['primeiro_dia']} a {stats['ultimo_dia']}")
             
         else:
             cache["carregando"] = False
             cache["erro"] = "Nenhum dado encontrado"
+            print("⚠️ Nenhum dado encontrado")
             
     except Exception as e:
         cache["carregando"] = False
         cache["erro"] = str(e)
-        print(f"❌ Erro na sincronização: {e}")
+        print(f"❌ Erro: {e}")
 
 @app.on_event("startup")
 async def startup():
@@ -257,19 +287,60 @@ async def root():
     <html lang="pt-BR">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
         <title>KIRA - Analista Operacional</title>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
-                color: #e2e8f0;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
-                min-height: 100vh;
-                padding: 20px;
+            
+            html, body {
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                background: black;
             }
-            .container { max-width: 800px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 40px; }
+            
+            /* Animação 3D do orbe */
+            .wrap {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                width: 0;
+                height: 0;
+                transform-style: preserve-3d;
+                perspective: 1000px;
+                animation: rotate 20s infinite linear;
+                z-index: 1;
+            }
+            
+            @keyframes rotate {
+                100% {
+                    transform: rotateY(360deg) rotateX(360deg);
+                }
+            }
+            
+            .c {
+                position: absolute;
+                width: 4px;
+                height: 4px;
+                border-radius: 50%;
+                opacity: 0;
+                background-color: #ec4899;
+            }
+            
+            /* Interface principal */
+            .interface {
+                position: relative;
+                z-index: 10;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+            
+            .header { text-align: center; margin-bottom: 30px; }
             .logo {
                 font-size: 3rem;
                 font-weight: 800;
@@ -277,16 +348,19 @@ async def root():
                 -webkit-background-clip: text;
                 background-clip: text;
                 color: transparent;
+                text-shadow: 0 0 30px rgba(236,72,153,0.3);
             }
             .card {
-                background: rgba(26, 26, 46, 0.9);
+                background: rgba(26, 26, 46, 0.85);
+                backdrop-filter: blur(10px);
                 border-radius: 16px;
                 padding: 24px;
                 margin-bottom: 20px;
                 border-left: 4px solid #ec4899;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
             }
             button {
-                background: #ec4899;
+                background: linear-gradient(135deg, #ec4899, #f472b6);
                 border: none;
                 padding: 12px 28px;
                 border-radius: 40px;
@@ -294,15 +368,16 @@ async def root():
                 cursor: pointer;
                 font-size: 16px;
                 margin: 5px;
-                transition: transform 0.2s;
+                transition: all 0.3s;
             }
-            button:hover { transform: scale(1.05); }
+            button:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(236,72,153,0.5); }
             .status-dot {
                 display: inline-block;
                 width: 10px;
                 height: 10px;
                 border-radius: 50%;
                 margin-right: 8px;
+                animation: pulse 2s infinite;
             }
             .online { background: #10b981; box-shadow: 0 0 8px #10b981; }
             .offline { background: #ef4444; }
@@ -312,6 +387,7 @@ async def root():
                 border-radius: 12px;
                 margin: 15px 0;
                 min-height: 80px;
+                font-size: 0.9rem;
             }
             .metric {
                 display: inline-block;
@@ -332,10 +408,17 @@ async def root():
                 0%, 100% { opacity: 1; }
                 50% { opacity: 0.5; }
             }
+            @media (max-width: 768px) {
+                .interface { padding: 10px; }
+                .logo { font-size: 2rem; }
+                .metric { display: block; margin: 8px 0; }
+            }
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="wrap" id="orb-container"></div>
+        
+        <div class="interface">
             <div class="header">
                 <div class="logo">🤖 KIRA</div>
                 <p>Analista Operacional Sênior - Usina Pitangueiras</p>
@@ -366,12 +449,49 @@ async def root():
                     <li>"Quantas colhedoras fretistas?"</li>
                     <li>"Qual o peso total moído?"</li>
                     <li>"Quantas viagens foram realizadas?"</li>
-                    <li>"Quantos caminhões próprios?"</li>
+                    <li>"Qual o período dos dados?"</li>
                 </ul>
             </div>
         </div>
 
         <script>
+            // ============================================================
+            // ANIMAÇÃO 3D COM PARTICULAS (baseada no CodePen)
+            // ============================================================
+            const TOTAL = 800;
+            const ORB_SIZE = 100;
+            
+            const container = document.getElementById('orb-container');
+            
+            for (let i = 0; i < TOTAL; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'c';
+                
+                const z = Math.random() * 360;
+                const y = Math.random() * 360;
+                const hue = (40 / TOTAL * i) + 0;
+                
+                particle.style.backgroundColor = `hsla(${hue}, 100%, 50%, 0.8)`;
+                particle.style.animation = `orbit${i} 14s infinite`;
+                particle.style.animationDelay = `${i * 0.01}s`;
+                
+                const style = document.createElement('style');
+                style.textContent = `
+                    @keyframes orbit${i} {
+                        0% { opacity: 0; transform: rotateZ(0deg) rotateY(0deg) translateX(0px); }
+                        20% { opacity: 1; }
+                        30% { transform: rotateZ(-${z}deg) rotateY(${y}deg) translateX(${ORB_SIZE}px) rotateZ(${z}deg); }
+                        80% { transform: rotateZ(-${z}deg) rotateY(${y}deg) translateX(${ORB_SIZE}px) rotateZ(${z}deg); opacity: 1; }
+                        100% { transform: rotateZ(-${z}deg) rotateY(${y}deg) translateX(${ORB_SIZE * 3}px) rotateZ(${z}deg); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+                container.appendChild(particle);
+            }
+            
+            // ============================================================
+            // FUNÇÕES DA INTERFACE
+            // ============================================================
             let mediaRecorder = null;
             let audioChunks = [];
             let isRecording = false;
@@ -421,10 +541,11 @@ async def root():
                                 <div class="metric-value">${data.caminhoes_terceiros}</div>
                                 <div>caminhões terceiros</div>
                             </div>
-                            <p style="margin-top: 12px; font-size: 0.8rem;">📅 Última sincronização: ${data.ultima_sync || 'Nunca'}</p>
+                            ${data.primeiro_dia ? `<p style="margin-top: 12px;">📅 Período: ${data.primeiro_dia} a ${data.ultimo_dia || data.primeiro_dia}</p>` : ''}
+                            <p style="margin-top: 8px; font-size: 0.7rem;">⏱️ Última sincronização: ${data.ultima_sync || 'Nunca'}</p>
                         `;
                     } else {
-                        document.getElementById('dados').innerHTML = '<p>⚠️ Nenhum dado encontrado no Firebase</p>';
+                        document.getElementById('dados').innerHTML = '<p>⚠️ Nenhum dado encontrado no Firebase</p><p style="font-size:0.8rem">Verificando coleção PRODUCAO_07_2025...</p>';
                     }
                 } catch (error) {
                     console.error('Erro:', error);
@@ -503,7 +624,7 @@ async def root():
                     if (!isRecording) startRecording();
                 } else {
                     btn.innerHTML = '✋ MÃOS LIVRES';
-                    btn.style.background = '#ec4899';
+                    btn.style.background = 'linear-gradient(135deg, #ec4899, #f472b6)';
                     if (isRecording) {
                         mediaRecorder.stop();
                         isRecording = false;
@@ -531,22 +652,10 @@ async def status():
         "total_peso": cache["total_peso_liquido"],
         "total_viagens": cache["total_viagens"],
         "ultima_sync": cache["ultima_sync"],
+        "primeiro_dia": cache["primeiro_dia"],
+        "ultimo_dia": cache["ultimo_dia"],
         "carregando": cache["carregando"],
         "hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    }
-
-@app.get("/api/dados")
-async def get_dados():
-    return {
-        "total_registros": cache["total_registros"],
-        "colhedoras_proprias": cache["colhedoras_proprias"],
-        "colhedoras_fretistas": cache["colhedoras_fretistas"],
-        "caminhoes_proprios": cache["caminhoes_proprios"],
-        "caminhoes_terceiros": cache["caminhoes_terceiros"],
-        "total_peso": cache["total_peso_liquido"],
-        "total_viagens": cache["total_viagens"],
-        "ultima_sync": cache["ultima_sync"],
-        "carregando": cache["carregando"]
     }
 
 @app.post("/api/transcribe")
@@ -592,15 +701,16 @@ async def chat(text: str = Form(...), session_id: str = Form(default="default"))
     
     # Contexto com dados REAIS
     contexto = f"""
-DADOS REAIS DA USINA PITANGUEIRAS (PRODUÇÃO 2025):
+DADOS REAIS DA USINA PITANGUEIRAS:
 
 - Registros processados: {cache['total_registros']}
-- Colhedoras próprias: {cache['colhedoras_proprias']}
-- Colhedoras fretistas: {cache['colhedoras_fretistas']}
-- Caminhões próprios: {cache['caminhoes_proprios']}
-- Caminhões terceiros: {cache['caminhoes_terceiros']}
+- Colhedoras próprias (prefixo 80): {cache['colhedoras_proprias']}
+- Colhedoras fretistas (prefixo 93): {cache['colhedoras_fretistas']}
+- Caminhões próprios (prefixo 31): {cache['caminhoes_proprios']}
+- Caminhões terceiros (prefixo 91): {cache['caminhoes_terceiros']}
 - Peso total moído: {cache['total_peso_liquido']:.0f} toneladas
 - Total de viagens: {cache['total_viagens']}
+- Período dos dados: {cache['primeiro_dia']} a {cache['ultimo_dia']}
 """
     
     system_prompt = f"""Você é KIRA, Analista Operacional da Usina Pitangueiras.
@@ -613,6 +723,7 @@ REGRAS IMPORTANTES:
 - NUNCA invente números
 - Trate o usuário como "Senhor"
 - Respostas curtas e objetivas (máximo 15 palavras)
+- Se perguntarem sobre período, informe as datas reais
 
 RESPOSTA:"""
 

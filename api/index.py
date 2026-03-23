@@ -443,3 +443,4 @@ RESPOSTA:"""
 async def forcar_sincronizacao():
     await diagnosticar_firebase()
     return {"status": "diagnóstico concluído", "registros": cache["total_registros"]}
+    

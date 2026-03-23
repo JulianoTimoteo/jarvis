@@ -1,11 +1,12 @@
 """
-KIRA — Analista Operacional Sênior
-Versão Completa com Firebase
+KIRA — Analista Operacional Sênior v12.0
+Leitura CORRETA de dados em chunks do Firebase
 """
 
 import os
 import json
 import tempfile
+import logging
 from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI, File, UploadFile, Form
@@ -34,13 +35,14 @@ cache = {
     "ultima_atualizacao": None,
     "colhedoras_proprias": 0,
     "colhedoras_fretistas": 0,
+    "caminhoes_proprios": 0,
+    "caminhoes_terceiros": 0,
     "total_registros": 0,
-    "total_area": 0,
-    "total_horas_corte": 0,
-    "total_horas_rtk": 0,
-    "adesao_rtk": 0,
-    "erro": None,
-    "carregando": True
+    "total_peso_liquido": 0,
+    "total_viagens": 0,
+    "ultima_sync": None,
+    "carregando": True,
+    "erro": None
 }
 
 # Inicializar Firebase
@@ -58,9 +60,9 @@ if FIREBASE_AVAILABLE and FIREBASE_CRED_JSON:
             print("✅ Firebase conectado")
     except Exception as e:
         firebase_status = f"Erro: {str(e)[:50]}"
+        print(f"❌ {firebase_status}")
 
-# App
-app = FastAPI(title="KIRA", version="1.2")
+app = FastAPI(title="KIRA", version="12.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,84 +72,179 @@ app.add_middleware(
 )
 
 # ============================================================
-# CARREGAR DADOS
+# FUNÇÕES DE LEITURA DOS DADOS
 # ============================================================
-async def carregar_dados():
-    """Carrega dados do Firebase"""
-    global cache
+def extrair_dados_da_linha(linha, cabecalho):
+    """Extrai dados de uma linha do chunk"""
+    if len(linha) != len(cabecalho):
+        return None
     
+    registro = {}
+    for i, campo in enumerate(cabecalho):
+        valor = linha[i]
+        # Converte valores numéricos
+        if campo in ["Peso Líquido", "Peso Bruto", "Peso Tara"]:
+            try:
+                valor = float(str(valor).replace(",", "."))
+            except:
+                valor = 0
+        registro[campo] = valor
+    
+    return registro
+
+async def ler_colecao_chunks():
+    """Lê dados da coleção PRODUCAO_07_2025 que está em chunks"""
     if not db:
-        cache["carregando"] = False
-        cache["erro"] = "Firebase não conectado"
-        return
+        return []
+    
+    todos_registros = []
+    cabecalho = None
+    
+    try:
+        # Primeiro, busca o documento principal que tem a estrutura de chunks
+        doc_ref = db.collection("PRODUCAO_07_2025").document("chunks")
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            dados = doc.to_dict()
+            # Pega o cabeçalho do campo 'cab'
+            if "cab" in dados:
+                cabecalho = dados["cab"]
+                print(f"📋 Cabeçalho encontrado: {len(cabecalho)} campos")
+            
+            # Pega todos os chunks
+            chunks = dados.get("chunks", {})
+            print(f"📦 Encontrados {len(chunks)} chunks")
+            
+            for chunk_name, chunk_data in chunks.items():
+                if "rows" in chunk_data:
+                    linhas = chunk_data["rows"]
+                    print(f"   Processando {chunk_name}: {len(linhas)} linhas")
+                    
+                    for linha in linhas:
+                        if cabecalho:
+                            registro = extrair_dados_da_linha(linha, cabecalho)
+                            if registro:
+                                todos_registros.append(registro)
+        
+        # Também tenta ler outras coleções
+        outras_colecoes = ["acmSafra", "tpl", "snapshots"]
+        for colecao in outras_colecoes:
+            try:
+                docs = db.collection(colecao).limit(500).get()
+                for doc in docs:
+                    dados = doc.to_dict()
+                    if dados:
+                        dados["_colecao"] = colecao
+                        todos_registros.append(dados)
+            except:
+                pass
+                
+    except Exception as e:
+        print(f"❌ Erro ao ler chunks: {e}")
+        cache["erro"] = str(e)
+    
+    return todos_registros
+
+def processar_dados(dados):
+    """Processa os dados extraídos"""
+    
+    colh_proprias = set()
+    colh_fretistas = set()
+    cam_proprios = set()
+    cam_terceiros = set()
+    total_peso = 0
+    total_viagens = 0
+    
+    for reg in dados:
+        try:
+            # Identifica equipamento
+            cod_equip = reg.get("Carreg./Colhed. 1") or reg.get("Carreg./Colhed. 2") or reg.get("Carreg./Colhed. 3") or reg.get("COD. EQUIPAMENTO")
+            
+            if cod_equip:
+                cod_str = str(cod_equip).strip()
+                
+                # Colhedoras: 80 = Própria, 93 = Fretista
+                if cod_str.startswith("80"):
+                    colh_proprias.add(cod_str)
+                elif cod_str.startswith("93"):
+                    colh_fretistas.add(cod_str)
+            
+            # Caminhões da frota motriz
+            frota = reg.get("Frota Motriz") or reg.get("frota_motriz")
+            if frota:
+                frota_str = str(frota).strip()
+                if frota_str.startswith("31"):
+                    cam_proprios.add(frota_str)
+                elif frota_str.startswith("91"):
+                    cam_terceiros.add(frota_str)
+            
+            # Peso líquido
+            peso = reg.get("Peso Líquido") or reg.get("peso_liquido") or 0
+            try:
+                peso_num = float(str(peso).replace(",", "."))
+                if peso_num > 0:
+                    total_peso += peso_num
+                    total_viagens += 1
+            except:
+                pass
+                
+        except Exception as e:
+            continue
+    
+    return {
+        "colhedoras_proprias": len(colh_proprias),
+        "colhedoras_fretistas": len(colh_fretistas),
+        "caminhoes_proprios": len(cam_proprios),
+        "caminhoes_terceiros": len(cam_terceiros),
+        "total_peso_liquido": total_peso,
+        "total_viagens": total_viagens,
+        "total_registros": len(dados)
+    }
+
+async def sincronizar_dados():
+    """Sincroniza dados do Firebase"""
+    global cache
     
     cache["carregando"] = True
     
-    colecoes = ["tpl", "acmSafra", "producao", "snapshots"]
-    
-    total_registros = 0
-    colh_proprias = set()
-    colh_fretistas = set()
-    total_area = 0
-    total_horas_corte = 0
-    total_horas_rtk = 0
-    
-    for colecao in colecoes:
-        try:
-            docs = await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(
-                    None, lambda: db.collection(colecao).limit(200).get()
-                ),
-                timeout=5.0
-            )
+    try:
+        dados = await ler_colecao_chunks()
+        
+        if dados:
+            stats = processar_dados(dados)
             
-            for doc in docs:
-                dados = doc.to_dict()
-                if dados:
-                    total_registros += 1
-                    
-                    cod = dados.get("COD. EQUIPAMENTO") or dados.get("COD_EQUIPAMENTO")
-                    if cod:
-                        cod_str = str(cod)
-                        if cod_str.startswith("80"):
-                            colh_proprias.add(cod_str)
-                        elif cod_str.startswith("93"):
-                            colh_fretistas.add(cod_str)
-                    
-                    area = dados.get("AREA TRABALHADA ANALITICA") or dados.get("area_trabalhada") or 0
-                    horas_corte = dados.get("HRS CORTE BASE AUT LIGADO") or dados.get("horas_corte") or 0
-                    horas_rtk = dados.get("HRS RTK_LIGADO") or dados.get("horas_rtk") or 0
-                    
-                    try:
-                        total_area += float(str(area).replace(",", ".")) if area else 0
-                        total_horas_corte += float(str(horas_corte).replace(",", ".")) if horas_corte else 0
-                        total_horas_rtk += float(str(horas_rtk).replace(",", ".")) if horas_rtk else 0
-                    except:
-                        pass
-                        
-        except Exception as e:
-            print(f"Erro em {colecao}: {e}")
-    
-    adesao = (total_horas_rtk / total_horas_corte * 100) if total_horas_corte > 0 else 0
-    
-    cache.update({
-        "total_registros": total_registros,
-        "colhedoras_proprias": len(colh_proprias),
-        "colhedoras_fretistas": len(colh_fretistas),
-        "total_area": total_area,
-        "total_horas_corte": total_horas_corte,
-        "total_horas_rtk": total_horas_rtk,
-        "adesao_rtk": adesao,
-        "ultima_atualizacao": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "carregando": False,
-        "erro": None
-    })
-    
-    print(f"✅ Carregado: {total_registros} registros, {len(colh_proprias)} próprias, {len(colh_fretistas)} fretistas")
+            cache.update({
+                "dados": dados[:100],  # Guarda apenas os primeiros 100
+                "total_registros": stats["total_registros"],
+                "colhedoras_proprias": stats["colhedoras_proprias"],
+                "colhedoras_fretistas": stats["colhedoras_fretistas"],
+                "caminhoes_proprios": stats["caminhoes_proprios"],
+                "caminhoes_terceiros": stats["caminhoes_terceiros"],
+                "total_peso_liquido": stats["total_peso_liquido"],
+                "total_viagens": stats["total_viagens"],
+                "ultima_sync": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                "carregando": False,
+                "erro": None
+            })
+            
+            print(f"✅ Sincronizado: {stats['total_registros']} registros")
+            print(f"   🚜 Colhedoras: {stats['colhedoras_proprias']} próprias, {stats['colhedoras_fretistas']} fretistas")
+            print(f"   🚛 Caminhões: {stats['caminhoes_proprios']} próprios, {stats['caminhoes_terceiros']} terceiros")
+            print(f"   📊 Peso total: {stats['total_peso_liquido']:,.0f} t")
+            
+        else:
+            cache["carregando"] = False
+            cache["erro"] = "Nenhum dado encontrado"
+            
+    except Exception as e:
+        cache["carregando"] = False
+        cache["erro"] = str(e)
+        print(f"❌ Erro na sincronização: {e}")
 
 @app.on_event("startup")
 async def startup():
-    asyncio.create_task(carregar_dados())
+    asyncio.create_task(sincronizar_dados())
 
 # ============================================================
 # ENDPOINTS
@@ -219,12 +316,12 @@ async def root():
             .metric {
                 display: inline-block;
                 background: rgba(236, 72, 153, 0.2);
-                padding: 8px 16px;
+                padding: 10px 16px;
                 border-radius: 8px;
-                margin: 4px;
+                margin: 5px;
             }
             .metric-value {
-                font-size: 1.5rem;
+                font-size: 1.3rem;
                 font-weight: bold;
                 color: #ec4899;
             }
@@ -250,7 +347,7 @@ async def root():
             </div>
 
             <div class="card">
-                <h3>📊 Dados do Firebase</h3>
+                <h3>📊 Dados Carregados</h3>
                 <div id="dados"></div>
             </div>
 
@@ -267,9 +364,9 @@ async def root():
                 <ul>
                     <li>"Quantas colhedoras próprias?"</li>
                     <li>"Quantas colhedoras fretistas?"</li>
-                    <li>"Qual a área total trabalhada?"</li>
-                    <li>"Como está a adesão ao RTK?"</li>
-                    <li>"Mostre as estatísticas"</li>
+                    <li>"Qual o peso total moído?"</li>
+                    <li>"Quantas viagens foram realizadas?"</li>
+                    <li>"Quantos caminhões próprios?"</li>
                 </ul>
             </div>
         </div>
@@ -280,16 +377,16 @@ async def root():
             let isRecording = false;
             let handsFreeMode = false;
 
-            async function atualizarDados() {
+            async function carregarStatus() {
                 try {
-                    const res = await fetch('/api/dados');
+                    const res = await fetch('/api/status');
                     const data = await res.json();
                     
                     document.getElementById('status').innerHTML = `
                         <p><span class="status-dot ${data.firebase_conectado ? 'online' : 'offline'}"></span>
                         Firebase: ${data.firebase_conectado ? '✅ CONECTADO' : '❌ DESCONECTADO'}</p>
                         <p>🎤 Groq: ${data.groq_ok ? '✅ Disponível' : '❌ Não configurado'}</p>
-                        <p>🕐 Servidor: ${data.hora}</p>
+                        <p>🕐 ${data.hora}</p>
                     `;
                     
                     if (data.carregando) {
@@ -302,21 +399,29 @@ async def root():
                             </div>
                             <div class="metric">
                                 <div class="metric-value">${data.colhedoras_proprias}</div>
-                                <div>próprias</div>
+                                <div>colhedoras próprias</div>
                             </div>
                             <div class="metric">
                                 <div class="metric-value">${data.colhedoras_fretistas}</div>
-                                <div>fretistas</div>
+                                <div>colhedoras fretistas</div>
                             </div>
                             <div class="metric">
-                                <div class="metric-value">${data.total_area.toLocaleString()}</div>
-                                <div>hectares</div>
+                                <div class="metric-value">${(data.total_peso / 1000).toFixed(1)}</div>
+                                <div>mil toneladas</div>
                             </div>
                             <div class="metric">
-                                <div class="metric-value">${data.adesao_rtk.toFixed(1)}%</div>
-                                <div>RTK</div>
+                                <div class="metric-value">${data.total_viagens.toLocaleString()}</div>
+                                <div>viagens</div>
                             </div>
-                            <p style="margin-top: 12px; font-size: 0.8rem;">📅 Atualizado: ${data.ultima_atualizacao || 'Nunca'}</p>
+                            <div class="metric">
+                                <div class="metric-value">${data.caminhoes_proprios}</div>
+                                <div>caminhões próprios</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${data.caminhoes_terceiros}</div>
+                                <div>caminhões terceiros</div>
+                            </div>
+                            <p style="margin-top: 12px; font-size: 0.8rem;">📅 Última sincronização: ${data.ultima_sync || 'Nunca'}</p>
                         `;
                     } else {
                         document.getElementById('dados').innerHTML = '<p>⚠️ Nenhum dado encontrado no Firebase</p>';
@@ -406,8 +511,8 @@ async def root():
                 }
             }
 
-            atualizarDados();
-            setInterval(atualizarDados, 10000);
+            carregarStatus();
+            setInterval(carregarStatus, 10000);
         </script>
     </body>
     </html>
@@ -416,10 +521,18 @@ async def root():
 @app.get("/api/status")
 async def status():
     return {
-        "status": "online",
-        "hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         "firebase_conectado": firebase_status == "Conectado",
-        "groq_ok": bool(GROQ_KEY)
+        "groq_ok": bool(GROQ_KEY),
+        "total_registros": cache["total_registros"],
+        "colhedoras_proprias": cache["colhedoras_proprias"],
+        "colhedoras_fretistas": cache["colhedoras_fretistas"],
+        "caminhoes_proprios": cache["caminhoes_proprios"],
+        "caminhoes_terceiros": cache["caminhoes_terceiros"],
+        "total_peso": cache["total_peso_liquido"],
+        "total_viagens": cache["total_viagens"],
+        "ultima_sync": cache["ultima_sync"],
+        "carregando": cache["carregando"],
+        "hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     }
 
 @app.get("/api/dados")
@@ -428,16 +541,12 @@ async def get_dados():
         "total_registros": cache["total_registros"],
         "colhedoras_proprias": cache["colhedoras_proprias"],
         "colhedoras_fretistas": cache["colhedoras_fretistas"],
-        "total_area": cache["total_area"],
-        "total_horas_corte": cache["total_horas_corte"],
-        "total_horas_rtk": cache["total_horas_rtk"],
-        "adesao_rtk": cache["adesao_rtk"],
-        "ultima_atualizacao": cache["ultima_atualizacao"],
-        "carregando": cache["carregando"],
-        "erro": cache["erro"],
-        "firebase_conectado": firebase_status == "Conectado",
-        "groq_ok": bool(GROQ_KEY),
-        "hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        "caminhoes_proprios": cache["caminhoes_proprios"],
+        "caminhoes_terceiros": cache["caminhoes_terceiros"],
+        "total_peso": cache["total_peso_liquido"],
+        "total_viagens": cache["total_viagens"],
+        "ultima_sync": cache["ultima_sync"],
+        "carregando": cache["carregando"]
     }
 
 @app.post("/api/transcribe")
@@ -478,21 +587,20 @@ async def chat(text: str = Form(...), session_id: str = Form(default="default"))
     if not GROQ_KEY:
         return {"answer": "Groq não configurado", "session_id": session_id}
     
-    # Aprendizado
     if "aprenda" in text.lower() or "grave" in text.lower():
         return {"answer": "Memorizado, Senhor.", "session_id": session_id}
     
-    # Contexto com dados reais
-    contexto = ""
-    if cache["total_registros"] > 0:
-        contexto = f"""
-DADOS REAIS DA USINA:
-- Total de registros processados: {cache["total_registros"]}
-- Colhedoras próprias: {cache["colhedoras_proprias"]}
-- Colhedoras fretistas: {cache["colhedoras_fretistas"]}
-- Área trabalhada: {cache["total_area"]:.0f} hectares
-- Horas de corte: {cache["total_horas_corte"]:.0f} horas
-- Adesão ao RTK: {cache["adesao_rtk"]:.1f}%
+    # Contexto com dados REAIS
+    contexto = f"""
+DADOS REAIS DA USINA PITANGUEIRAS (PRODUÇÃO 2025):
+
+- Registros processados: {cache['total_registros']}
+- Colhedoras próprias: {cache['colhedoras_proprias']}
+- Colhedoras fretistas: {cache['colhedoras_fretistas']}
+- Caminhões próprios: {cache['caminhoes_proprios']}
+- Caminhões terceiros: {cache['caminhoes_terceiros']}
+- Peso total moído: {cache['total_peso_liquido']:.0f} toneladas
+- Total de viagens: {cache['total_viagens']}
 """
     
     system_prompt = f"""Você é KIRA, Analista Operacional da Usina Pitangueiras.
@@ -500,11 +608,11 @@ DADOS REAIS DA USINA:
 {contexto}
 
 REGRAS IMPORTANTES:
-- Use SOMENTE os dados fornecidos acima
-- Se não tiver dados, diga "Senhor, ainda não há dados carregados do Firebase"
-- NUNCA invente números ou valores
-- Responda de forma formal, trate o usuário como "Senhor"
-- Respostas curtas (máximo 15 palavras)
+- USE SOMENTE OS DADOS FORNECIDOS ACIMA
+- Se não tiver dados, diga "Senhor, aguardando dados do Firebase"
+- NUNCA invente números
+- Trate o usuário como "Senhor"
+- Respostas curtas e objetivas (máximo 15 palavras)
 
 RESPOSTA:"""
 
@@ -533,3 +641,8 @@ RESPOSTA:"""
             
     except Exception as e:
         return {"answer": f"Erro: {str(e)[:100]}", "session_id": session_id}
+
+@app.post("/api/sync")
+async def forcar_sincronizacao():
+    await sincronizar_dados()
+    return {"status": "sincronizado", "registros": cache["total_registros"]}

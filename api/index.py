@@ -1,6 +1,6 @@
 """
 KIRA - Analista de Cana-de-Açúcar
-Dados REAIS do Firebase
+Usando API Key do Firebase (mais simples)
 """
 
 from fastapi import FastAPI, File, UploadFile, Form
@@ -13,14 +13,6 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-# Tentar importar Firebase
-try:
-    import firebase_admin
-    from firebase_admin import credentials, firestore
-    FIREBASE_OK = True
-except:
-    FIREBASE_OK = False
-
 app = FastAPI()
 
 app.add_middleware(
@@ -31,7 +23,8 @@ app.add_middleware(
 )
 
 GROQ_KEY = os.getenv("GROQ_KEY", "")
-FIREBASE_CRED = os.getenv("FIREBASE_CRED_JSON", "")
+FIREBASE_API_KEY = "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc"  # Sua API Key do Firebase
+PROJECT_ID = "agroanalytics-api"
 
 # Cache dos dados reais
 dados_reais = {
@@ -47,39 +40,60 @@ dados_reais = {
     "erro": None
 }
 
-# Inicializar Firebase
-db = None
-if FIREBASE_OK and FIREBASE_CRED:
-    try:
-        cred_dict = json.loads(FIREBASE_CRED)
-        cred = credentials.Certificate(cred_dict)
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-            db = firestore.client()
-            print("✅ Firebase conectado")
-    except Exception as e:
-        print(f"❌ Firebase: {e}")
+def extrair_dados_da_linha(linha, cabecalho):
+    """Extrai dados de uma linha do chunk"""
+    if len(linha) != len(cabecalho):
+        return None
+    
+    registro = {}
+    for i, campo in enumerate(cabecalho):
+        valor = linha[i]
+        # Converte valores numéricos
+        if campo in ["Peso Líquido", "Peso Bruto", "Peso Tara"]:
+            try:
+                if valor and valor != "" and valor != " ":
+                    valor = float(str(valor).replace(",", "."))
+                else:
+                    valor = 0
+            except:
+                valor = 0
+        registro[campo] = valor
+    
+    return registro
 
 def carregar_dados():
-    """Carrega dados do Firebase"""
+    """Carrega dados do Firebase usando REST API"""
     global dados_reais
     
-    if not db:
-        dados_reais["erro"] = "Firebase não conectado"
-        return
-    
     try:
-        # Tenta ler a coleção PRODUCAO_07_2025
-        doc_ref = db.collection("PRODUCAO_07_2025").document("chunks")
-        doc = doc_ref.get()
+        # URL para acessar o documento chunks da coleção PRODUCAO_07_2025
+        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/PRODUCAO_07_2025/chunks?key={FIREBASE_API_KEY}"
         
-        if not doc.exists:
-            dados_reais["erro"] = "Coleção PRODUCAO_07_2025 não encontrada"
+        print(f"🔍 Buscando dados em: PRODUCAO_07_2025/chunks")
+        
+        response = httpx.get(url, timeout=30.0)
+        
+        if response.status_code != 200:
+            dados_reais["erro"] = f"Erro HTTP {response.status_code}: {response.text[:200]}"
+            print(f"❌ {dados_reais['erro']}")
             return
         
-        dados = doc.to_dict()
-        cabecalho = dados.get("cab", [])
-        chunks = dados.get("chunks", {})
+        dados = response.json()
+        
+        # Extrai os campos
+        campos = dados.get("fields", {})
+        
+        # Pega o cabeçalho (cab)
+        cab_field = campos.get("cab", {})
+        cabecalho = cab_field.get("arrayValue", {}).get("values", [])
+        cabecalho = [c.get("stringValue", "") for c in cabecalho]
+        
+        # Pega os chunks
+        chunks_field = campos.get("chunks", {})
+        chunks = chunks_field.get("mapValue", {}).get("fields", {})
+        
+        print(f"📋 Cabeçalho: {len(cabecalho)} campos")
+        print(f"📦 Chunks encontrados: {len(chunks)}")
         
         # Processa os dados
         colh_proprias = set()
@@ -91,47 +105,56 @@ def carregar_dados():
         registros = 0
         
         for chunk_name, chunk_data in chunks.items():
-            if "rows" in chunk_data:
-                linhas = chunk_data["rows"]
-                for linha in linhas:
-                    if len(linha) != len(cabecalho):
-                        continue
-                    
-                    # Converte linha em dicionário
-                    reg = {}
-                    for i, campo in enumerate(cabecalho):
-                        reg[campo] = linha[i]
-                    
-                    registros += 1
-                    
-                    # Colhedoras
-                    for i in range(1, 4):
-                        colh = reg.get(f"Carreg./Colhed. {i}")
-                        if colh:
-                            colh_str = str(colh).strip()
-                            if colh_str.startswith("80"):
-                                colh_proprias.add(colh_str)
-                            elif colh_str.startswith("93"):
-                                colh_fretistas.add(colh_str)
-                    
-                    # Caminhões
-                    frota = reg.get("Frota Motriz")
-                    if frota:
-                        frota_str = str(frota).strip()
-                        if frota_str.startswith("31"):
-                            cam_proprios.add(frota_str)
-                        elif frota_str.startswith("91"):
-                            cam_terceiros.add(frota_str)
-                    
-                    # Peso
-                    peso = reg.get("Peso Líquido", 0)
-                    if peso and peso != "":
-                        try:
-                            peso_num = float(str(peso).replace(",", "."))
-                            peso_total += peso_num
-                            total_viagens += 1
-                        except:
-                            pass
+            # Pega as rows do chunk
+            rows_field = chunk_data.get("mapValue", {}).get("fields", {}).get("rows", {})
+            rows_values = rows_field.get("arrayValue", {}).get("values", [])
+            
+            for row in rows_values:
+                row_values = row.get("arrayValue", {}).get("values", [])
+                linha = [v.get("stringValue", v.get("integerValue", v.get("doubleValue", ""))) for v in row_values]
+                
+                if len(linha) != len(cabecalho):
+                    continue
+                
+                # Converte para dicionário
+                reg = {}
+                for i, campo in enumerate(cabecalho):
+                    reg[campo] = linha[i]
+                
+                registros += 1
+                
+                # Colhedoras (Carreg./Colhed. 1, 2, 3)
+                for i in range(1, 4):
+                    colh = reg.get(f"Carreg./Colhed. {i}")
+                    if colh and colh != "" and colh != " ":
+                        colh_str = str(colh).strip()
+                        if colh_str.startswith("80"):
+                            colh_proprias.add(colh_str)
+                        elif colh_str.startswith("93"):
+                            colh_fretistas.add(colh_str)
+                
+                # Caminhões (Frota Motriz)
+                frota = reg.get("Frota Motriz")
+                if frota and frota != "":
+                    frota_str = str(frota).strip()
+                    if frota_str.startswith("31"):
+                        cam_proprios.add(frota_str)
+                    elif frota_str.startswith("91"):
+                        cam_terceiros.add(frota_str)
+                
+                # Peso Líquido
+                peso = reg.get("Peso Líquido", 0)
+                if peso and peso != "" and peso != " ":
+                    try:
+                        peso_num = float(str(peso).replace(",", "."))
+                        peso_total += peso_num
+                        total_viagens += 1
+                    except:
+                        pass
+                
+                # Mostra progresso a cada 1000 registros
+                if registros % 1000 == 0:
+                    print(f"   Processados {registros} registros...")
         
         # Atualiza cache
         dados_reais["carregado"] = True
@@ -145,20 +168,25 @@ def carregar_dados():
         dados_reais["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         dados_reais["erro"] = None
         
-        print(f"✅ Dados carregados: {registros} registros")
-        print(f"   🚜 Colhedoras: {len(colh_proprias)} próprias, {len(colh_fretistas)} fretistas")
-        print(f"   🚛 Caminhões: {len(cam_proprios)} próprios, {len(cam_terceiros)} terceiros")
-        print(f"   📊 Peso: {peso_total:,.0f} kg")
+        print(f"\n✅ DADOS CARREGADOS COM SUCESSO!")
+        print(f"   📊 {registros} registros processados")
+        print(f"   🚜 Colhedoras próprias: {len(colh_proprias)}")
+        print(f"   🚜 Colhedoras fretistas: {len(colh_fretistas)}")
+        print(f"   🚛 Caminhões próprios: {len(cam_proprios)}")
+        print(f"   🚛 Caminhões terceiros: {len(cam_terceiros)}")
+        print(f"   📈 Peso total: {peso_total/1000:,.0f} toneladas")
+        print(f"   🚚 Viagens: {total_viagens}")
         
     except Exception as e:
         dados_reais["erro"] = str(e)
-        print(f"❌ Erro ao carregar: {e}")
+        print(f"❌ Erro: {e}")
 
 # Carrega os dados na inicialização
 try:
     carregar_dados()
 except Exception as e:
     print(f"Erro na inicialização: {e}")
+    dados_reais["erro"] = str(e)
 
 @app.get("/")
 async def index():
@@ -226,7 +254,7 @@ async def index():
             <div class="metric"><div class="value">{dados_reais["caminhoes_proprios"]}</div>caminhões próprios</div>
             <div class="metric"><div class="value">{dados_reais["caminhoes_terceiros"]}</div>caminhões terceiros</div>
             <p style="margin-top: 10px;">📅 Atualizado: {dados_reais["ultima_atualizacao"] or "Nunca"}</p>
-            ''' if dados_reais["carregado"] else f'<p class="warning">⚠️ {dados_reais["erro"] or "Carregando dados..."}</p>'}
+            ''' if dados_reais["carregado"] else f'<p class="error">❌ {dados_reais["erro"] or "Carregando dados..."}</p>'}
         </div>
         
         <div class="box">
@@ -251,39 +279,43 @@ async def index():
             let chunks = [];
             
             async function startRecording() {{
-                const stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
-                mediaRecorder = new MediaRecorder(stream);
-                chunks = [];
-                
-                mediaRecorder.ondataavailable = e => chunks.push(e.data);
-                mediaRecorder.onstop = async () => {{
-                    const blob = new Blob(chunks, {{ type: 'audio/webm' }});
-                    const form = new FormData();
-                    form.append('audio', blob);
+                try {{
+                    const stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
+                    mediaRecorder = new MediaRecorder(stream);
+                    chunks = [];
                     
-                    document.getElementById('result').innerHTML = '🎙️ Processando...';
+                    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+                    mediaRecorder.onstop = async () => {{
+                        const blob = new Blob(chunks, {{ type: 'audio/webm' }});
+                        const form = new FormData();
+                        form.append('audio', blob);
+                        
+                        document.getElementById('result').innerHTML = '🎙️ Processando...';
+                        
+                        const trans = await fetch('/api/transcribe', {{ method: 'POST', body: form }});
+                        const {{ text }} = await trans.json();
+                        
+                        const chatForm = new FormData();
+                        chatForm.append('text', text);
+                        const chatRes = await fetch('/api/chat', {{ method: 'POST', body: chatForm }});
+                        const {{ answer }} = await chatRes.json();
+                        
+                        document.getElementById('result').innerHTML = `
+                            <strong>🗣️ Você:</strong> ${{text}}<br>
+                            <strong>🤖 KIRA:</strong> ${{answer}}
+                        `;
+                        
+                        const speech = new SpeechSynthesisUtterance(answer);
+                        speech.lang = 'pt-BR';
+                        speechSynthesis.speak(speech);
+                    }};
                     
-                    const trans = await fetch('/api/transcribe', {{ method: 'POST', body: form }});
-                    const {{ text }} = await trans.json();
-                    
-                    const chatForm = new FormData();
-                    chatForm.append('text', text);
-                    const chatRes = await fetch('/api/chat', {{ method: 'POST', body: chatForm }});
-                    const {{ answer }} = await chatRes.json();
-                    
-                    document.getElementById('result').innerHTML = `
-                        <strong>🗣️ Você:</strong> ${{text}}<br>
-                        <strong>🤖 KIRA:</strong> ${{answer}}
-                    `;
-                    
-                    const speech = new SpeechSynthesisUtterance(answer);
-                    speech.lang = 'pt-BR';
-                    speechSynthesis.speak(speech);
-                }};
-                
-                mediaRecorder.start();
-                setTimeout(() => mediaRecorder.stop(), 5000);
-                document.getElementById('result').innerHTML = '🎙️ Gravando... Fale sobre cana-de-açúcar';
+                    mediaRecorder.start();
+                    setTimeout(() => mediaRecorder.stop(), 5000);
+                    document.getElementById('result').innerHTML = '🎙️ Gravando... Fale sobre cana-de-açúcar';
+                }} catch (error) {{
+                    document.getElementById('result').innerHTML = '❌ Erro: ' + error.message;
+                }}
             }}
         </script>
     </body>
@@ -330,7 +362,10 @@ DADOS REAIS DA USINA PITANGUEIRAS (CANA-DE-AÇÚCAR):
 - Total de viagens: {dados_reais["total_viagens"]}
 """
     else:
-        contexto = "Aguardando dados do Firebase. Conecte-se ao banco de dados."
+        contexto = f"""
+ERRO: {dados_reais["erro"]}
+Por favor, verifique a conexão com o Firebase.
+"""
     
     system_prompt = f"""Você é KIRA, Analista de Cana-de-Açúcar da Usina Pitangueiras.
 

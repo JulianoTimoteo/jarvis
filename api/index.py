@@ -1,6 +1,6 @@
 """
 KIRA - Analista de Cana-de-Açúcar
-Usando API Key do Firebase (mais simples)
+Lendo chunks corretamente do Firebase
 """
 
 from fastapi import FastAPI, File, UploadFile, Form
@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 GROQ_KEY = os.getenv("GROQ_KEY", "")
-FIREBASE_API_KEY = "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc"  # Sua API Key do Firebase
+FIREBASE_API_KEY = "AIzaSyADUuqh_THzGInTSytxzUFEwHV5LmwdvYc"
 PROJECT_ID = "agroanalytics-api"
 
 # Cache dos dados reais
@@ -48,7 +48,6 @@ def extrair_dados_da_linha(linha, cabecalho):
     registro = {}
     for i, campo in enumerate(cabecalho):
         valor = linha[i]
-        # Converte valores numéricos
         if campo in ["Peso Líquido", "Peso Bruto", "Peso Tara"]:
             try:
                 if valor and valor != "" and valor != " ":
@@ -62,40 +61,65 @@ def extrair_dados_da_linha(linha, cabecalho):
     return registro
 
 def carregar_dados():
-    """Carrega dados do Firebase usando REST API"""
+    """Carrega dados do Firebase lendo os chunks individualmente"""
     global dados_reais
     
     try:
-        # URL para acessar o documento chunks da coleção PRODUCAO_07_2025
-        url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/PRODUCAO_07_2025/chunks?key={FIREBASE_API_KEY}"
+        # Primeiro, lista todos os documentos dentro de PRODUCAO_07_2025
+        list_url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/PRODUCAO_07_2025?key={FIREBASE_API_KEY}"
         
-        print(f"🔍 Buscando dados em: PRODUCAO_07_2025/chunks")
-        
-        response = httpx.get(url, timeout=30.0)
+        print(f"🔍 Listando documentos em PRODUCAO_07_2025...")
+        response = httpx.get(list_url, timeout=30.0)
         
         if response.status_code != 200:
-            dados_reais["erro"] = f"Erro HTTP {response.status_code}: {response.text[:200]}"
+            dados_reais["erro"] = f"Erro {response.status_code}: {response.text[:200]}"
             print(f"❌ {dados_reais['erro']}")
             return
         
         dados = response.json()
+        documentos = dados.get("documents", [])
         
-        # Extrai os campos
-        campos = dados.get("fields", {})
+        print(f"📁 Documentos encontrados: {len(documentos)}")
         
-        # Pega o cabeçalho (cab)
-        cab_field = campos.get("cab", {})
-        cabecalho = cab_field.get("arrayValue", {}).get("values", [])
-        cabecalho = [c.get("stringValue", "") for c in cabecalho]
+        # Procura o documento "chunks" que contém todos os chunks
+        chunks_doc = None
+        for doc in documentos:
+            doc_name = doc.get("name", "")
+            if "chunks" in doc_name:
+                chunks_doc = doc
+                print(f"✅ Encontrado: {doc_name}")
+                break
         
-        # Pega os chunks
-        chunks_field = campos.get("chunks", {})
-        chunks = chunks_field.get("mapValue", {}).get("fields", {})
+        if not chunks_doc:
+            dados_reais["erro"] = "Documento 'chunks' não encontrado"
+            print(f"❌ {dados_reais['erro']}")
+            return
+        
+        # Agora lê o documento chunks
+        chunks_url = f"https://firestore.googleapis.com/v1/{chunks_doc['name']}?key={FIREBASE_API_KEY}"
+        chunks_response = httpx.get(chunks_url, timeout=30.0)
+        
+        if chunks_response.status_code != 200:
+            dados_reais["erro"] = f"Erro ao ler chunks: {chunks_response.status_code}"
+            return
+        
+        chunks_data = chunks_response.json()
+        fields = chunks_data.get("fields", {})
+        
+        # Pega o cabeçalho
+        cab_field = fields.get("cab", {})
+        cab_array = cab_field.get("arrayValue", {}).get("values", [])
+        cabecalho = [c.get("stringValue", "") for c in cab_array]
         
         print(f"📋 Cabeçalho: {len(cabecalho)} campos")
-        print(f"📦 Chunks encontrados: {len(chunks)}")
         
-        # Processa os dados
+        # Pega os chunks (subdocumentos)
+        chunks_field = fields.get("chunks", {})
+        chunks_map = chunks_field.get("mapValue", {}).get("fields", {})
+        
+        print(f"📦 Chunks encontrados: {len(chunks_map)}")
+        
+        # Processa cada chunk
         colh_proprias = set()
         colh_fretistas = set()
         cam_proprios = set()
@@ -104,14 +128,26 @@ def carregar_dados():
         total_viagens = 0
         registros = 0
         
-        for chunk_name, chunk_data in chunks.items():
-            # Pega as rows do chunk
+        for chunk_name, chunk_data in chunks_map.items():
+            # Cada chunk tem um campo "rows"
             rows_field = chunk_data.get("mapValue", {}).get("fields", {}).get("rows", {})
-            rows_values = rows_field.get("arrayValue", {}).get("values", [])
+            rows_array = rows_field.get("arrayValue", {}).get("values", [])
             
-            for row in rows_values:
+            print(f"   Processando {chunk_name}: {len(rows_array)} linhas")
+            
+            for row in rows_array:
                 row_values = row.get("arrayValue", {}).get("values", [])
-                linha = [v.get("stringValue", v.get("integerValue", v.get("doubleValue", ""))) for v in row_values]
+                linha = []
+                for v in row_values:
+                    # Pega o valor de cada campo (pode ser string, int, double)
+                    if "stringValue" in v:
+                        linha.append(v["stringValue"])
+                    elif "integerValue" in v:
+                        linha.append(v["integerValue"])
+                    elif "doubleValue" in v:
+                        linha.append(v["doubleValue"])
+                    else:
+                        linha.append("")
                 
                 if len(linha) != len(cabecalho):
                     continue
@@ -147,14 +183,15 @@ def carregar_dados():
                 if peso and peso != "" and peso != " ":
                     try:
                         peso_num = float(str(peso).replace(",", "."))
-                        peso_total += peso_num
-                        total_viagens += 1
+                        if peso_num > 0:
+                            peso_total += peso_num
+                            total_viagens += 1
                     except:
                         pass
                 
-                # Mostra progresso a cada 1000 registros
+                # Mostra progresso
                 if registros % 1000 == 0:
-                    print(f"   Processados {registros} registros...")
+                    print(f"      Processados {registros} registros...")
         
         # Atualiza cache
         dados_reais["carregado"] = True
@@ -349,7 +386,6 @@ async def chat(text: str = Form(...)):
     if not GROQ_KEY:
         return {"answer": "Groq não configurado"}
     
-    # Constrói o contexto com dados REAIS
     if dados_reais["carregado"]:
         contexto = f"""
 DADOS REAIS DA USINA PITANGUEIRAS (CANA-DE-AÇÚCAR):
@@ -362,22 +398,18 @@ DADOS REAIS DA USINA PITANGUEIRAS (CANA-DE-AÇÚCAR):
 - Total de viagens: {dados_reais["total_viagens"]}
 """
     else:
-        contexto = f"""
-ERRO: {dados_reais["erro"]}
-Por favor, verifique a conexão com o Firebase.
-"""
+        contexto = f"ERRO: {dados_reais['erro']}"
     
     system_prompt = f"""Você é KIRA, Analista de Cana-de-Açúcar da Usina Pitangueiras.
 
 {contexto}
 
-REGRAS OBRIGATÓRIAS:
-1. VOCÊ SÓ FALA SOBRE CANA-DE-AÇÚCAR
-2. USE SOMENTE OS NÚMEROS ACIMA - NUNCA INVENTE
-3. Se perguntarem sobre soja, milho, dinheiro ou qualquer outra coisa, responda: "Senhor, meu banco de dados é exclusivo de cana-de-açúcar."
+REGRAS:
+1. SÓ FALE SOBRE CANA-DE-AÇÚCAR
+2. USE SOMENTE OS NÚMEROS ACIMA
+3. Se perguntarem sobre soja, milho ou dinheiro: "Senhor, meu banco de dados é exclusivo de cana-de-açúcar."
 4. Trate o usuário como "Senhor"
 5. Respostas curtas (máximo 15 palavras)
-6. Seja formal e objetiva
 
 RESPOSTA:"""
 
